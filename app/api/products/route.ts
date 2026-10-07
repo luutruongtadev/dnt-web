@@ -29,7 +29,20 @@ export async function GET(req: NextRequest) {
     if (v) where[col] = v;
   };
   eq("listingType", "listing_type");
-  eq("categoryType", "category_type");
+
+  // channel=platform -> only posts registered for the platform to act as agent
+  // (trust_platform); the default/member channel shows every published post.
+  if (sp.get("channel") === "platform") where.trust_platform = true;
+
+  // FOOD_DRINK is the merged "THỰC PHẨM" category. For backward compat, also match
+  // existing products stored as "FOOD" or "DRINK" (before the categories were merged).
+  const categoryType = sp.get("categoryType");
+  if (categoryType === "FOOD_DRINK") {
+    where.category_type = { in: ["FOOD_DRINK", "FOOD", "DRINK"] };
+  } else if (categoryType) {
+    where.category_type = categoryType;
+  }
+
   eq("conditionType", "condition_type");
   eq("nation", "nation");
   eq("province", "province");

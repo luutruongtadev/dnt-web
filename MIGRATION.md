@@ -228,10 +228,73 @@ SUPABASE_API_KEY/service key in .env.local — same values Strapi used).
 NOTE: realtime is client-side via Supabase (FE subscribes to the messages table);
 no server broadcast needed. Images also still go straight to Cloudinary client-side.
 
+## Friend-request + product live-session + metrics — DONE
+
+(were listed as NEXT but have since been ported.)
+- Friend-request: `GET/POST /friend-requests`, `/incoming`, `/outgoing`,
+  `/[id]/accept`, `/[id]/reject` (`lib/services/friend-request.ts`); feeds
+  conversations/sync's incoming list.
+- Product live-session sub-routes: `/products/[id]/live-session` (+ `/join`,
+  `/bids`), `/products/[id]/pic`, `/products/goods-videos`
+  (`lib/services/product-live.ts`).
+- System metrics: `/system-info/metrics` (`lib/services/metrics.ts`).
+
+## Business module — DONE (3 routes, tsc clean)
+
+Faithful port of api/business/controllers/business.js (`lib/services/business.ts`):
+- `POST /api/business` — createOrUpdateBusiness: upserts the user's LATEST
+  business (max id) by column, syncs `up_users.business_id`, upserts attached
+  `user_documents` by (type,user_id) and morph-links their `file_ids` (replaces
+  existing `file` links on update). Returns created-vs-updated message.
+- `GET /api/business/me` — latest business for the user (null + message if none).
+- `POST /api/business/verify` — pass iff the user has ≥1 user_document → marks
+  business `status='verified'` + fires BUSINESS_VERIFIED notification; else fail.
+Notifications: `lib/services/notify.ts` — port of notification-dispatcher +
+realtime-notify; in-app via `realtime.send(...)` (Supabase Realtime) by template
+code, `{key}` interpolation; email/sms/push stay stubs. Reusable by wallet later.
+VERIFIED live (no prod writes): all 3 routes 401 without/with-bad token; tsc clean.
+
+## Wallet + SEPAY — DONE (7 routes, tsc clean)
+
+Core financial engine + payment gateway ported faithful to the original.
+
+**Services:**
+- `lib/services/money.ts` — roundMoney / isValidAmount / moneyEquals (float-safe 2dp).
+- `lib/services/risk.ts` — assertWithinLimits: per-tx min/max + daily outgoing cap
+  (WITHDRAW_HOLD + TRANSFER); reads `system_configurations.risk_limits` with
+  DEFAULT_LIMITS fallback.
+- `lib/services/wallet-ledger.ts` — port of wallet-ledger.js (852 LOC):
+  double-entry ledger via Prisma interactive transactions + `SELECT … FOR UPDATE`
+  row locks. Writes `ledger_transactions`, `ledger_entries`, `wallet_ledger_entries`
+  (legacy compat), `wallets` cache, `payment_transactions`. Idempotency on
+  (type, referenceType, referenceId) + idempotencyKey. Public API: `deposit`,
+  `transfer`, `internalTransfer`, `holdWithdrawal`, `captureWithdrawal`,
+  `releaseWithdrawal`, `getWalletLedger`, `hasLedgerTransaction`.
+- `lib/payment/sepay.ts` — `verifyWebhook` (timingSafeEqual on Apikey header,
+  parse DNT{id} code), `createDepositIntent` (VietQR URL builder).
+
+**Routes:**
+- `GET  /wallets/my-wallet` — user's wallet via up_users_wallet_lnk; ensureUserWallet if none.
+- `GET  /wallets/favorite-wallets` — linked wallets via wallets_user_lnk.
+- `GET  /wallets/my-ledger?limit=&offset=` — paginated double-entry ledger.
+- `POST /wallets/transfer` — transfer between wallets (risk check → ledger.transfer).
+- `POST /wallets/internal-transfer` — move to sub-account goods/freelancer/ailive.
+- `POST /payment/deposit-intent/sepay` — returns QR/bank info for user to transfer.
+- `POST /payment/webhook/[provider]` — SEPAY posts here on bank transfer; verify
+  Apikey → find wallet by DNT{id} → risk check → ledger.deposit (idempotent).
+
+VERIFIED live (no prod writes): all 7 routes correct status without auth/bad-key;
+webhook /unknown → 404; tsc clean.
+
+⚠️ NOT live-tested with real money / real SEPAY call — test in staging with
+parity checks before enabling SEPAY_WEBHOOK_API_KEY + SEPAY_BANK_ACCOUNT in prod.
+
 ## NEXT (not yet ported)
 
-- [ ] friend-request module (sync's incoming list), product live-session sub-routes.
-- [ ] Heavy: wallet/SEPAY (financial — do with parity tests), document generation, reconciliation.
+- [ ] Document generation (docxtemplater / pdf-lib / puppeteer) + contract/sign endpoints.
+- [ ] Reconciliation run endpoint.
+- [ ] User-document upload controller (upload CCCD/business doc files).
+- [ ] STILL OPEN: DB isolation (no migrate against shared DB).
 - [ ] STILL OPEN: DB isolation (no migrate against shared DB); relation populate on
       remaining read endpoints; set SUPABASE storage creds for uploads.
 - [ ] Heavy custom controllers: product sub-routes (pic upload, live-session),

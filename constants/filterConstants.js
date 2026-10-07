@@ -9,8 +9,8 @@ const cond = (vi, en, code) => ({ vi, en, code })
 const GOODS_STATES = [cond("PHẾ LIỆU", "SCRAP", "S"), cond("MỚI", "NEW", "N"), cond("CŨ", "OLD", "O"), cond("CHƯA SỬ DỤNG", "UNUSED", "U")]
 const PREMIUM_STATES = [cond("MỚI", "NEW", "N"), cond("CŨ", "OLD", "O"), cond("CHƯA SỬ DỤNG", "UNUSED", "U"), cond("PHẾ LIỆU", "SCRAP", "S")]
 const NEW_OLD_OTHER = [cond("MỚI", "NEW", "N"), cond("CŨ", "OLD", "O"), cond("KHÁC", "OTHER", "#")]
-const FOOD_STATES = [cond("NÓNG", "HOT", "HO"), cond("NGUỘI", "COLD", "CO"), cond("KHÁC", "OTHER", "#")]
-const DRINK_STATES = [cond("NÓNG", "HOT", "HO"), cond("LẠNH", "COLD", "CO"), cond("KHÁC", "OTHER", "#")]
+// Gộp đồ ăn + đồ uống thành THỰC PHẨM; COLD gom NGUỘI + LẠNH thành một.
+const FOOD_DRINK_STATES = [cond("NÓNG", "HOT", "HO"), cond("LẠNH/NGUỘI", "COLD", "CO"), cond("KHÁC", "OTHER", "#")]
 const LAND_STATES = [cond("< 200 m2", "UNDER 200 M2", "200"), cond("< 1.000 m2", "UNDER 1000 M2", "1000"), cond("< 10.000 m2", "UNDER 10000 M2", "10.000"), cond("KHÁC", "OTHER", "#")]
 const HOUSE_STATES = [cond("ĐỂ Ở", "RESIDENTIAL", "LF"), cond("KINH DOANH", "BUSINESS", "B"), cond("KHÁC", "OTHER", "#")]
 const MANPOWER_STATES = [cond("LAO ĐỘNG PHỔ THÔNG", "GENERAL LABOR", "G"), cond("THỢ", "WORKER", "W"), cond("KỸ SƯ - GIÁM SÁT", "ENGINEER - SUPERVISOR", "S"), cond("CHUYÊN GIA", "EXPERT", "P"), cond("KHÁC", "OTHER", "#")]
@@ -46,8 +46,7 @@ const RAW_TREE = [
     vi: "HÀNG BÁN", en: "SALE", code: "S",
     subCategories: [
       { vi: "HÀNG HÓA", en: "GOODS", code: "G", conditions: withTax(GOODS_STATES, 1, 0.5) },
-      { vi: "ĐỒ ĂN", en: "FOOD", code: "ET", conditions: FOOD_STATES },
-      { vi: "ĐỒ UỐNG", en: "DRINK", code: "DR", conditions: DRINK_STATES },
+      { vi: "THỰC PHẨM", en: "FOOD_DRINK", code: "FD", conditions: FOOD_DRINK_STATES },
       { vi: "ĐẤT", en: "LAND", code: "L", conditions: LAND_STATES },
       { vi: "NHÀ", en: "HOUSE", code: "H", conditions: HOUSE_STATES },
       { vi: "PHƯƠNG TIỆN", en: "VEHICLE", code: "V", conditions: withTax(GOODS_STATES, 1, 0.5) },
@@ -60,8 +59,7 @@ const RAW_TREE = [
     vi: "CẦN MUA", en: "BUY", code: "B",
     subCategories: [
       { vi: "HÀNG HÓA", en: "GOODS", code: "G", conditions: withTax(GOODS_STATES, 1, 0.5) },
-      { vi: "ĐỒ ĂN", en: "FOOD", code: "ET", conditions: FOOD_STATES },
-      { vi: "ĐỒ UỐNG", en: "DRINK", code: "DR", conditions: DRINK_STATES },
+      { vi: "THỰC PHẨM", en: "FOOD_DRINK", code: "FD", conditions: FOOD_DRINK_STATES },
       { vi: "ĐẤT", en: "LAND", code: "L", conditions: LAND_STATES },
       { vi: "NHÀ", en: "HOUSE", code: "H", conditions: HOUSE_STATES },
       { vi: "PHƯƠNG TIỆN", en: "VEHICLE", code: "V", conditions: withTax(GOODS_STATES, 1, 0.5) },

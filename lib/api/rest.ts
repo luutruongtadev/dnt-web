@@ -54,29 +54,35 @@ function genDocId() {
 
 // Factory for a read-only Strapi-style collection GET.
 // `published: false` for content types without draft/publish (no published_at col).
-// Usage: export const GET = listHandler(prisma.events);
-export function listHandler(model: Delegate, opts: { published?: boolean } = {}) {
-  const { published = true } = opts;
+// `maxAge` (seconds) adds Cache-Control headers so the browser/CDN can cache
+//   the response — only use for public, non-personalised, stable endpoints.
+// Usage: export const GET = listHandler(prisma.events, { maxAge: 60 });
+export function listHandler(model: Delegate, opts: { published?: boolean; maxAge?: number } = {}) {
+  const { published = true, maxAge } = opts;
   return async () => {
     const rows = await model.findMany({
       where: published ? { published_at: { not: null } } : undefined,
       orderBy: { id: "asc" },
     });
     const data = rows.map(toStrapi);
-    return jsonResponse({ data, meta: { pagination: { total: data.length } } });
+    const headers: Record<string, string> = {};
+    if (maxAge) headers["Cache-Control"] = `public, max-age=${maxAge}, stale-while-revalidate=${maxAge * 4}`;
+    return jsonResponse({ data, meta: { pagination: { total: data.length } } }, { headers });
   };
 }
 
 // Factory for a Strapi single-type GET — returns the first (published) row as a
-// single object. Usage: export const GET = singleHandler(prisma.globals);
-export function singleHandler(model: Delegate, opts: { published?: boolean } = {}) {
-  const { published = true } = opts;
+// single object. Usage: export const GET = singleHandler(prisma.globals, { maxAge: 60 });
+export function singleHandler(model: Delegate, opts: { published?: boolean; maxAge?: number } = {}) {
+  const { published = true, maxAge } = opts;
   return async () => {
     const row = await model.findFirst({
       where: published ? { published_at: { not: null } } : undefined,
       orderBy: { id: "asc" },
     });
-    return jsonResponse({ data: row ? toStrapi(row) : null });
+    const headers: Record<string, string> = {};
+    if (maxAge) headers["Cache-Control"] = `public, max-age=${maxAge}, stale-while-revalidate=${maxAge * 4}`;
+    return jsonResponse({ data: row ? toStrapi(row) : null }, { headers });
   };
 }
 
