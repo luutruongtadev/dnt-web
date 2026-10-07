@@ -8,7 +8,12 @@ import { genDocumentId } from "@/lib/services/user-wallet";
 const USER_DOC_MORPH = "api::user-document.user-document";
 
 function dataUrlToFile(dataUrl: string, filename: string): File {
-  const [header, base64] = dataUrl.split(",");
+  // data URL format: data:<mime>;base64,<data>
+  // Split only on the first comma to guard against any edge-case content.
+  const commaIdx = dataUrl.indexOf(",");
+  if (commaIdx === -1) throw new Error("imageBase64 is not a valid data URL (missing comma)");
+  const header = dataUrl.slice(0, commaIdx);
+  const base64 = dataUrl.slice(commaIdx + 1);
   const mime = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
   const binary = Buffer.from(base64, "base64");
   return new File([binary], filename, { type: mime });
@@ -33,45 +38,47 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "imageBase64 and type are required" }, { status: 400 });
   }
 
-  const file = dataUrlToFile(body.imageBase64, `${body.type}-${Date.now()}.jpg`);
-
-  let uploaded: { id: number; url: string | null; name: string | null };
   try {
-    uploaded = await uploadFileToStorage(file);
+    const file = dataUrlToFile(body.imageBase64, `${body.type}-${Date.now()}.jpg`);
+    const uploaded = await uploadFileToStorage(file);
+
+    const now = new Date();
+
+    // Upsert user_documents row for this user+type
+    let doc = await prisma.user_documents.findFirst({
+      where: { user_id: user.id, type: body.type },
+    });
+
+    if (!doc) {
+      doc = await prisma.user_documents.create({
+        data: {
+          document_id: genDocumentId(),
+          type: body.type,
+          user_id: user.id,
+          created_at: now,
+          updated_at: now,
+          published_at: now,
+        },
+      });
+    } else {
+      // Remove previous morph link so only the latest image is kept
+      await prisma.files_related_mph.deleteMany({
+        where: { related_type: USER_DOC_MORPH, related_id: doc.id, field: body.type },
+      });
+      await prisma.user_documents.update({
+        where: { id: doc.id },
+        data: { updated_at: now },
+      });
+    }
+
+    await linkFileMorph(uploaded.id, USER_DOC_MORPH, doc.id, body.type);
+
+    return NextResponse.json({
+      file: { id: uploaded.id, url: uploaded.url, name: uploaded.name },
+    });
   } catch (err) {
-    console.error("[user-document/upload] storage error:", err);
-    return NextResponse.json({ error: "File upload failed" }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[user-document/upload] error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-
-  // Upsert user_documents row for this user+type (one doc record per type per user)
-  const now = new Date();
-  let doc = await prisma.user_documents.findFirst({
-    where: { user_id: user.id, type: body.type },
-  });
-
-  if (!doc) {
-    doc = await prisma.user_documents.create({
-      data: {
-        document_id: genDocumentId(),
-        type: body.type,
-        user_id: user.id,
-        created_at: now,
-        updated_at: now,
-        published_at: now,
-      },
-    });
-  } else {
-    // Remove previous morph link for this field so only the latest image is kept
-    await prisma.files_related_mph.deleteMany({
-      where: { related_type: USER_DOC_MORPH, related_id: doc.id, field: body.type },
-    });
-    await prisma.user_documents.update({
-      where: { id: doc.id },
-      data: { updated_at: now },
-    });
-  }
-
-  await linkFileMorph(uploaded.id, USER_DOC_MORPH, doc.id, body.type);
-
-  return NextResponse.json({ file: { id: uploaded.id, url: uploaded.url, name: uploaded.name } });
 }

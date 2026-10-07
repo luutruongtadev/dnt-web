@@ -1,6 +1,6 @@
 "use client";
 const PageHeaderWithOutColorPicker = ({
-  color,
+  color = "#ffffff",
   onColorChange,
   titlePrefix = "2",
   leftButton,
