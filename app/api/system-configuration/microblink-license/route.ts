@@ -15,16 +15,11 @@ const getLicenseKey = unstable_cache(
 );
 
 // Public — no auth required (mirrors Strapi auth: false).
+// Returns licenseKey as empty string when not configured (avoids 404 crashing the scanner init).
 export async function GET() {
   const licenseKey = await getLicenseKey();
-  if (!licenseKey) {
-    return NextResponse.json(
-      { error: "Microblink license key is not configured" },
-      { status: 404 }
-    );
-  }
   return NextResponse.json(
-    { success: true, data: { licenseKey } },
+    { success: true, data: { licenseKey: licenseKey ?? "" } },
     { headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=1200" } }
   );
 }
