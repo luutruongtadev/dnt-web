@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { signToken, verifyPassword, isRecaptchaEnabled } from "@/lib/auth";
+import { mediaUrlFor } from "@/lib/services/files";
+
+const USER_MORPH = "plugin::users-permissions.user";
 
 const MAX_LOGIN_FAILURES = 5;
 
@@ -152,5 +155,20 @@ export async function POST(req: Request) {
 
   const token = signToken({ cccd: existingUser.cccd, id: existingUser.id });
   const { password: _pw, ...safe } = existingUser;
-  return NextResponse.json({ token, user: { ...safe, account_type: safe.account_type || "ca_nhan" } });
+
+  // Populate morph-linked media so localStorage has avt + company_logo on first load.
+  const [avt, companyLogo] = await Promise.all([
+    mediaUrlFor(USER_MORPH, existingUser.id, "avt"),
+    mediaUrlFor(USER_MORPH, existingUser.id, "company_logo"),
+  ]);
+
+  return NextResponse.json({
+    token,
+    user: {
+      ...safe,
+      account_type: safe.account_type || "ca_nhan",
+      avt,
+      company_logo: companyLogo ? { url: companyLogo } : null,
+    },
+  });
 }
