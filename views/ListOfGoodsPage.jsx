@@ -5,6 +5,7 @@ import { useNavigate } from '@/lib/router-compat';
 import { filterProducts } from "../services/productService";
 import { useTranslation } from 'react-i18next';
 import { getCountries, getCountryByCode } from "../services/countries";
+import { getVietnamProvinces } from "../services/vietnamInfoService";
 import { getMediaUrl } from "../services/videoService";
 import { categories, getSubCategoryList, getConditionList, SUBCATEGORY_PLACEHOLDER, CONDITION_PLACEHOLDER } from "../constants/filterConstants";
 import {
@@ -31,6 +32,8 @@ export default function ListOfGoodsPage() {
   const [selectedCountry, setSelectedCountry] = useState(null);
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  // 'member' = posts of member accounts, 'platform' = posts the platform sells as agent
+  const [channel, setChannel] = useState('member');
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -39,7 +42,8 @@ export default function ListOfGoodsPage() {
     conditionType: '',
     nation: '',
     province: '',
-    name: ''
+    name: '',
+    channel: 'member'
   });
   const [products, setProducts] = useState([]);
   const [totalPages, setTotalPages] = useState(1);
@@ -103,11 +107,12 @@ export default function ListOfGoodsPage() {
         conditionType: selectedCondition || '',
         nation: selectedCountry || '',
         province: selectedProvince || '',
-        name: searchTerm.trim()
+        name: searchTerm.trim(),
+        channel
       });
     }, 300);
     return () => clearTimeout(timer);
-  }, [selectedCategory, selectedSubcategory, selectedCondition, selectedCountry, selectedProvince, searchTerm]);
+  }, [selectedCategory, selectedSubcategory, selectedCondition, selectedCountry, selectedProvince, searchTerm, channel]);
 
   const handleChangeColor = (e) => {
     const newColor = e.target.value;
@@ -171,14 +176,7 @@ export default function ListOfGoodsPage() {
       try {
         let provincesList = [];
         if (selectedCountry === "Vietnam") {
-          const token = localStorage.getItem("authToken");
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337/api"}/vietnam-info`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {}
-          });
-          const json = await res.json();
-          const tinh = json?.data?.tinh || [];
-          const all = { vi: "Tất cả", en: "All" };
-          provincesList = [all, ...tinh.map(p => ({ vi: p.name, en: p.name }))];
+          provincesList = await getVietnamProvinces();
         } else {
           provincesList = await getCountryByCode(selectedCountry) || [];
         }
@@ -400,6 +398,26 @@ export default function ListOfGoodsPage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Channel tabs: two equal cells */}
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            {[
+              { key: 'member', label: isVi ? 'THÀNH VIÊN' : 'MEMBERS' },
+              { key: 'platform', label: isVi ? 'NỀN TẢNG' : 'PLATFORM' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                aria-pressed={channel === tab.key}
+                onClick={() => setChannel(tab.key)}
+                className={`p-2 border-2 border-red-600 font-bold text-lg transition-colors ${
+                  channel === tab.key ? 'bg-red-600 text-white' : 'bg-white text-red-600 hover:bg-red-50'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
           {/* Search section */}

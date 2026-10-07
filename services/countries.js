@@ -1,6 +1,11 @@
+import { cachedFetch } from "@/lib/clientCache";
 
+const TTL_COUNTRIES = 24 * 60 * 60 * 1000; // 24 h — country list almost never changes
+const TTL_STATES = 60 * 60 * 1000;          // 1 h
+const TTL_CITIES = 30 * 60 * 1000;          // 30 min
 
 export const getCountries = async () => {
+  return cachedFetch("countries:all", async () => {
   try {
     const response = await fetch("https://countriesnow.space/api/v0.1/countries/flag/images");
     if (!response.ok) {
@@ -37,11 +42,11 @@ export const getCountries = async () => {
     console.error("Error fetching countries:", error);
     return [];
   }
-}
-
-
+  }, TTL_COUNTRIES);
+};
 
 export const getCountryByCode = async (name) => {
+  return cachedFetch(`countries:states:${name}`, async () => {
   try {
     const myHeaders = new Headers();
     myHeaders.append("Content-Type", "application/json");
@@ -68,9 +73,11 @@ export const getCountryByCode = async (name) => {
     console.error("Error fetching country by code:", error);
     return [];
   }
+  }, TTL_STATES);
 };
 
 export const getDistrictByCode = async (province) => {
+  return cachedFetch(`countries:cities:${province}`, async () => {
   try {
     const myHeaders = new Headers();
     myHeaders.append("Content-Type", "application/json");
@@ -96,4 +103,5 @@ export const getDistrictByCode = async (province) => {
     console.error("Error fetching districts by province code:", error);
     return [];
   }
+  }, TTL_CITIES);
 };

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 
 // Postgres int8 columns surface as JS BigInt, which JSON.stringify can't handle.
 // Emit them as strings (same as Strapi's own REST output).
@@ -54,16 +55,30 @@ function genDocId() {
 
 // Factory for a read-only Strapi-style collection GET.
 // `published: false` for content types without draft/publish (no published_at col).
-// `maxAge` (seconds) adds Cache-Control headers so the browser/CDN can cache
-//   the response — only use for public, non-personalised, stable endpoints.
-// Usage: export const GET = listHandler(prisma.events, { maxAge: 60 });
-export function listHandler(model: Delegate, opts: { published?: boolean; maxAge?: number } = {}) {
-  const { published = true, maxAge } = opts;
-  return async () => {
-    const rows = await model.findMany({
+// `maxAge` (seconds) adds Cache-Control headers AND server-side unstable_cache so
+//   the Postgres query is skipped on repeat requests within the revalidation window.
+//   Only use for public, non-personalised, stable endpoints.
+// `cacheKey` is required when maxAge is set — must be globally unique (e.g. "events").
+// Usage: export const GET = listHandler(prisma.events, { maxAge: 60, cacheKey: "events" });
+export function listHandler(
+  model: Delegate,
+  opts: { published?: boolean; maxAge?: number; cacheKey?: string } = {}
+) {
+  const { published = true, maxAge, cacheKey } = opts;
+
+  const query = () =>
+    model.findMany({
       where: published ? { published_at: { not: null } } : undefined,
       orderBy: { id: "asc" },
     });
+
+  const cachedQuery =
+    maxAge && cacheKey
+      ? unstable_cache(query, [cacheKey], { revalidate: maxAge, tags: [cacheKey] })
+      : query;
+
+  return async () => {
+    const rows = await cachedQuery();
     const data = rows.map(toStrapi);
     const headers: Record<string, string> = {};
     if (maxAge) headers["Cache-Control"] = `public, max-age=${maxAge}, stale-while-revalidate=${maxAge * 4}`;
@@ -72,14 +87,26 @@ export function listHandler(model: Delegate, opts: { published?: boolean; maxAge
 }
 
 // Factory for a Strapi single-type GET — returns the first (published) row as a
-// single object. Usage: export const GET = singleHandler(prisma.globals, { maxAge: 60 });
-export function singleHandler(model: Delegate, opts: { published?: boolean; maxAge?: number } = {}) {
-  const { published = true, maxAge } = opts;
-  return async () => {
-    const row = await model.findFirst({
+// single object. Usage: export const GET = singleHandler(prisma.globals, { maxAge: 300, cacheKey: "global" });
+export function singleHandler(
+  model: Delegate,
+  opts: { published?: boolean; maxAge?: number; cacheKey?: string } = {}
+) {
+  const { published = true, maxAge, cacheKey } = opts;
+
+  const query = () =>
+    model.findFirst({
       where: published ? { published_at: { not: null } } : undefined,
       orderBy: { id: "asc" },
     });
+
+  const cachedQuery =
+    maxAge && cacheKey
+      ? unstable_cache(query, [cacheKey], { revalidate: maxAge, tags: [cacheKey] })
+      : query;
+
+  return async () => {
+    const row = await cachedQuery();
     const headers: Record<string, string> = {};
     if (maxAge) headers["Cache-Control"] = `public, max-age=${maxAge}, stale-while-revalidate=${maxAge * 4}`;
     return jsonResponse({ data: row ? toStrapi(row) : null }, { headers });
