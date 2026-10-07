@@ -95,9 +95,9 @@ export async function markConversationRead(conversationId: number, me: number): 
   return unread.length;
 }
 
-type UserLite = { id: number; full_name: string | null; bank_number: string | null; avt: string | null };
+export type UserLite = { id: number; full_name: string | null; bank_number: string | null; avt: string | null };
 
-async function usersWithAvatar(ids: number[]): Promise<Map<number, UserLite>> {
+export async function usersWithAvatar(ids: number[]): Promise<Map<number, UserLite>> {
   const map = new Map<number, UserLite>();
   if (!ids.length) return map;
   const users = await prisma.up_users.findMany({

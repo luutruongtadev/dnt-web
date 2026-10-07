@@ -21,6 +21,26 @@ export function fileToStrapi(f: Record<string, unknown>) {
   };
 }
 
+// Returns a Map<relatedId, Record<field, file>> for a Strapi media morph relation,
+// keyed by the morph `field` column (the attribute name, e.g. "advertisingVideoFile").
+// These product/item fields are single media, so the first file per field wins.
+export async function mediaFieldsByRelatedId(typeContains: string, ids: number[]) {
+  const map = new Map<number, Record<string, ReturnType<typeof fileToStrapi>>>();
+  if (ids.length === 0) return map;
+  const links = await prisma.files_related_mph.findMany({
+    where: { related_id: { in: ids }, related_type: { contains: typeContains } },
+    include: { files: true },
+    orderBy: { order: "asc" },
+  });
+  for (const link of links) {
+    if (link.related_id == null || !link.files || !link.field) continue;
+    const fields = map.get(link.related_id) ?? {};
+    if (!fields[link.field]) fields[link.field] = fileToStrapi(link.files as unknown as Record<string, unknown>);
+    map.set(link.related_id, fields);
+  }
+  return map;
+}
+
 // Returns a Map<relatedId, file[]> for a Strapi media morph relation.
 // `typeContains` discriminates the content type (e.g. "product.product" to avoid
 // matching "product-item.product-item"). Populates a whole page of rows in one query.

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { toStrapi } from "@/lib/api/rest";
-import { mediaByRelatedId } from "@/lib/api/media";
+import { mediaByRelatedId, mediaFieldsByRelatedId } from "@/lib/api/media";
 import { createProductFromBody } from "@/lib/api/product-write";
 
 function jsonBig(payload: unknown, init?: ResponseInit) {
@@ -52,12 +52,53 @@ export async function GET(req: NextRequest) {
   ]);
 
   const ids = rows.map((r) => r.id);
-  const pics = await mediaByRelatedId("product.product", ids);
 
-  const data = rows.map((r) => ({
-    ...toStrapi(r as unknown as Record<string, unknown>),
-    pictures: pics.get(r.id) ?? [],
-  }));
+  // Mirror Strapi's PRODUCT_DETAIL_POPULATE: poster + named product media fields
+  // (advertisingVideoFile, videoFile, ...) + productItems each with their media.
+  const [pics, prodFields, posterLinks, itemLinks] = await Promise.all([
+    mediaByRelatedId("product.product", ids),
+    mediaFieldsByRelatedId("product.product", ids),
+    prisma.products_poster_lnk.findMany({ where: { product_id: { in: ids } }, include: { up_users: true } }),
+    prisma.product_items_product_lnk.findMany({ where: { product_id: { in: ids } }, select: { product_id: true, product_item_id: true } }),
+  ]);
+
+  const posterOf = new Map<number, { id: number; documentId: string | null; username: string | null; full_name: string | null; cccd: string | null }>();
+  for (const l of posterLinks) {
+    if (l.product_id == null || !l.up_users) continue;
+    const u = l.up_users;
+    posterOf.set(l.product_id, { id: u.id, documentId: u.document_id, username: u.username, full_name: u.full_name, cccd: u.cccd });
+  }
+
+  const itemIds = itemLinks.map((l) => l.product_item_id).filter((x): x is number => x != null);
+  const [itemRows, itemFields] = await Promise.all([
+    itemIds.length ? prisma.product_items.findMany({ where: { id: { in: itemIds } } }) : Promise.resolve([]),
+    itemIds.length ? mediaFieldsByRelatedId("product-item.product-item", itemIds) : Promise.resolve(new Map()),
+  ]);
+  const itemRowOf = new Map(itemRows.map((r) => [r.id, r]));
+  const itemsByProduct = new Map<number, number[]>();
+  for (const l of itemLinks) {
+    if (l.product_id == null || l.product_item_id == null) continue;
+    const arr = itemsByProduct.get(l.product_id) ?? [];
+    arr.push(l.product_item_id);
+    itemsByProduct.set(l.product_id, arr);
+  }
+
+  const data = rows.map((r) => {
+    const productItems = (itemsByProduct.get(r.id) ?? [])
+      .map((iid) => {
+        const row = itemRowOf.get(iid);
+        if (!row) return null;
+        return { ...toStrapi(row as unknown as Record<string, unknown>), ...(itemFields.get(iid) ?? {}) };
+      })
+      .filter(Boolean);
+    return {
+      ...toStrapi(r as unknown as Record<string, unknown>),
+      ...(prodFields.get(r.id) ?? {}),
+      poster: posterOf.get(r.id) ?? null,
+      productItems,
+      pictures: pics.get(r.id) ?? [],
+    };
+  });
 
   return jsonBig({
     data,
