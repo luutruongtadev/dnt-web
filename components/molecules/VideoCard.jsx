@@ -30,7 +30,7 @@ export default function VideoCard({ index, name, productId, viewers, saves, shar
           <span className="text-xs font-bold text-blue-800 truncate">{name} <span className="text-blue-700">{productId}</span></span>
         </div>
         {hasPlatformLogo && (
-          <img src={platformLogo} alt="Logo nền tảng" title="Logo nền tảng" className="w-6 h-6 rounded-full object-cover shrink-0" />
+          <img src={platformLogo?.src || platformLogo} alt="Logo nền tảng" title="Logo nền tảng" className="w-6 h-6 rounded-full object-cover shrink-0" />
         )}
       </div>
 

@@ -70,7 +70,7 @@ export default function AiLiveAccount({ title, onTransfer }) {
         />
         <div className="font-bold flex-1 border-gray-300 flex items-center justify-center">
           {/* <span className="mr-2">D|</span> */}
-          <img src={Logo} className="w-4 h-4" alt="logo" />
+          <img src={Logo?.src || Logo} className="w-4 h-4" alt="logo" />
         </div>
       </div>
 

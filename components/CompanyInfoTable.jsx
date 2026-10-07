@@ -214,7 +214,7 @@ const CompanyInfoTable = ({ userCountry = 'vi' }) => {
     ? `SỐ TÀI KHOẢN VIETINBANK: ${userData?.bank_account_number || '108873456789'}`
     : `VIETINBANK ACCOUNT NO: ${userData?.bank_account_number || '108873456789'}`;
 
-  const companyLogo = userData?.company_logo?.url || planetImage;
+  const companyLogo = userData?.company_logo?.url || planetImage?.src || planetImage;
 
   return (
     <>
