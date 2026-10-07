@@ -1,19 +1,76 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, RefreshCw, X, ChevronRight, CheckCircle, AlertCircle } from "lucide-react";
+import { RefreshCw, X, ChevronRight, CheckCircle, AlertCircle } from "lucide-react";
+
+// ── Detection constants ───────────────────────────────────────────────────────
+// Interval between frame analyses (ms)
+const DETECT_INTERVAL_MS = 200;
+// How many consecutive stable frames before auto-capture fires
+// 15 × 200ms = 3 s of "card held still"
+const STABLE_FRAMES_NEEDED = 15;
+// Minimum luminance std-dev in the guide zone — too low = plain background, not a card
+const MIN_CONTENT_STDDEV = 22;
+// Maximum mean pixel diff between consecutive frames — too high = card is moving
+const MAX_MOTION_DIFF = 12;
+
+// Sample the guide zone of the video into a small ImageData for fast analysis.
+function sampleGuideZone(video) {
+  if (!video || video.readyState < 2 || !video.videoWidth) return null;
+  const W = 64, H = 36;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  // Guide overlay is 90% wide × 58% tall, centred in the frame
+  const sx = video.videoWidth * 0.05;
+  const sy = video.videoHeight * 0.21;
+  const sw = video.videoWidth * 0.9;
+  const sh = video.videoHeight * 0.58;
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+  return ctx.getImageData(0, 0, W, H).data;
+}
+
+function luminanceStdDev(pixels) {
+  const n = pixels.length / 4;
+  let mean = 0;
+  for (let i = 0; i < pixels.length; i += 4) {
+    mean += 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
+  }
+  mean /= n;
+  let variance = 0;
+  for (let i = 0; i < pixels.length; i += 4) {
+    const l = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
+    variance += (l - mean) ** 2;
+  }
+  return Math.sqrt(variance / n);
+}
+
+function frameDiff(a, b) {
+  if (!a || !b || a.length !== b.length) return Infinity;
+  let sum = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    sum += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+  }
+  return sum / (a.length / 4);
+}
 
 /**
  * CccdScanner — camera-based Vietnamese CCCD extractor using LLM vision.
+ * Auto-detects when the card is placed in the guide frame and captures
+ * without requiring the user to press a button.
  *
  * Props:
  *   onResult({ fullName, idNumber, dateOfBirth, sex, nationality,
  *              placeOfOrigin, placeOfResidence, expiryDate,
- *              frontDataUrl, backDataUrl }) — called on successful extraction
- *   onClose() — called when user dismisses the scanner
+ *              frontDataUrl, backDataUrl })
+ *   onClose()
  */
 export default function CccdScanner({ onResult, onClose }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const prevPixelsRef = useRef(null);
+  const stableCountRef = useRef(0);
+  const capturedRef = useRef(false); // prevent double-capture
 
   // step: "front" | "back" | "confirm" | "extracting" | "error"
   const [step, setStep] = useState("front");
@@ -21,12 +78,21 @@ export default function CccdScanner({ onResult, onClose }) {
   const [backDataUrl, setBackDataUrl] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [cameraError, setCameraError] = useState("");
+  // countdown: null = not detecting, 3/2/1 = countdown seconds remaining
+  const [countdown, setCountdown] = useState(null);
 
   const startCamera = useCallback(async () => {
     setCameraError("");
+    capturedRef.current = false;
+    stableCountRef.current = 0;
+    prevPixelsRef.current = null;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
         audio: false,
       });
       streamRef.current = stream;
@@ -46,9 +112,11 @@ export default function CccdScanner({ onResult, onClose }) {
       streamRef.current = null;
     }
     if (videoRef.current) videoRef.current.srcObject = null;
+    stableCountRef.current = 0;
+    capturedRef.current = false;
   }, []);
 
-  // Start camera when we need live view (front or back capture step)
+  // Start/stop camera based on active step
   useEffect(() => {
     if (step === "front" || step === "back") {
       startCamera();
@@ -59,9 +127,7 @@ export default function CccdScanner({ onResult, onClose }) {
   }, [step, startCamera, stopCamera]);
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => stopCamera();
-  }, [stopCamera]);
+  useEffect(() => () => stopCamera(), [stopCamera]);
 
   const captureFrame = () => {
     const video = videoRef.current;
@@ -75,21 +141,63 @@ export default function CccdScanner({ onResult, onClose }) {
     return canvas.toDataURL("image/jpeg", 0.92);
   };
 
-  const handleCaptureFront = () => {
-    const dataUrl = captureFrame();
-    if (!dataUrl) return;
-    setFrontDataUrl(dataUrl);
-    setStep("back");
-  };
+  // ── Auto-detection loop ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (step !== "front" && step !== "back") return;
 
-  const handleCaptureBack = () => {
-    const dataUrl = captureFrame();
-    if (!dataUrl) return;
-    setBackDataUrl(dataUrl);
-    setStep("confirm");
-  };
+    const iv = setInterval(() => {
+      if (capturedRef.current) return;
+      const video = videoRef.current;
+      const pixels = sampleGuideZone(video);
+      if (!pixels) return;
+
+      const stdDev = luminanceStdDev(pixels);
+      const motion = frameDiff(pixels, prevPixelsRef.current);
+      prevPixelsRef.current = pixels;
+
+      const cardPresent = stdDev > MIN_CONTENT_STDDEV && motion < MAX_MOTION_DIFF;
+
+      if (cardPresent) {
+        stableCountRef.current += 1;
+      } else {
+        stableCountRef.current = 0;
+      }
+
+      // Update countdown UI (3 → 2 → 1 → capture)
+      const remaining = STABLE_FRAMES_NEEDED - stableCountRef.current;
+      if (stableCountRef.current > 0 && remaining > 0) {
+        const cd = remaining <= 5 ? 1 : remaining <= 10 ? 2 : 3;
+        setCountdown(cd);
+      } else if (stableCountRef.current === 0) {
+        setCountdown(null);
+      }
+
+      if (stableCountRef.current >= STABLE_FRAMES_NEEDED) {
+        capturedRef.current = true;
+        stableCountRef.current = 0;
+        setCountdown(null);
+        clearInterval(iv);
+
+        const dataUrl = captureFrame();
+        if (!dataUrl) return;
+        if (step === "front") {
+          setFrontDataUrl(dataUrl);
+          setStep("back");
+        } else {
+          setBackDataUrl(dataUrl);
+          setStep("confirm");
+        }
+      }
+    }, DETECT_INTERVAL_MS);
+
+    return () => clearInterval(iv);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const handleRetake = (side) => {
+    capturedRef.current = false;
+    stableCountRef.current = 0;
+    setCountdown(null);
     if (side === "front") {
       setFrontDataUrl(null);
       setBackDataUrl(null);
@@ -100,13 +208,16 @@ export default function CccdScanner({ onResult, onClose }) {
     }
   };
 
-  const handleExtract = async () => {
+  const handleExtract = useCallback(async () => {
     setStep("extracting");
     setErrorMsg("");
     try {
       const res = await fetch("/api/cccd/extract", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("authToken") || ""}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("authToken") || ""}`,
+        },
         body: JSON.stringify({ frontBase64: frontDataUrl, backBase64: backDataUrl }),
       });
       const json = await res.json();
@@ -120,12 +231,15 @@ export default function CccdScanner({ onResult, onClose }) {
       setErrorMsg(err.message || "Đã xảy ra lỗi. Vui lòng thử lại.");
       setStep("error");
     }
-  };
+  }, [frontDataUrl, backDataUrl, onResult, onClose]);
 
   const handleClose = () => {
     stopCamera();
     onClose?.();
   };
+
+  // Guide frame colour: green when counting down, white otherwise
+  const guideColor = countdown !== null ? "border-green-400" : "border-white/50";
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/95">
@@ -142,15 +256,15 @@ export default function CccdScanner({ onResult, onClose }) {
       {/* Header */}
       <div className="mb-4 px-6 text-center text-white">
         <h2 className="text-xl font-bold">
-          {step === "front" && "Chụp mặt trước CCCD"}
-          {step === "back" && "Chụp mặt sau CCCD"}
+          {step === "front" && "Đưa mặt trước CCCD vào khung"}
+          {step === "back" && "Đưa mặt sau CCCD vào khung"}
           {step === "confirm" && "Xác nhận ảnh CCCD"}
           {step === "extracting" && "Đang đọc thông tin..."}
           {step === "error" && "Đã xảy ra lỗi"}
         </h2>
         <p className="mt-1 text-sm text-gray-300">
-          {step === "front" && "Đặt mặt trước CCCD vào khung, giữ rõ nét rồi nhấn chụp"}
-          {step === "back" && "Lật thẻ, đặt mặt sau CCCD vào khung rồi nhấn chụp"}
+          {step === "front" && "Giữ thẻ thẳng trong khung — hệ thống tự chụp khi nhận diện được"}
+          {step === "back" && "Lật thẻ, giữ thẳng trong khung — hệ thống tự chụp khi nhận diện được"}
           {step === "confirm" && "Kiểm tra ảnh hai mặt trước khi xác nhận"}
           {step === "extracting" && "Hệ thống đang phân tích hình ảnh CCCD của bạn"}
           {step === "error" && errorMsg}
@@ -173,29 +287,41 @@ export default function CccdScanner({ onResult, onClose }) {
               </button>
             </div>
           ) : (
-            <>
-              {/* CCCD aspect-ratio guide overlay */}
-              <div className="relative overflow-hidden rounded-lg bg-black">
-                <video
-                  ref={videoRef}
-                  className="h-auto w-full object-cover"
-                  playsInline
-                  muted
-                />
-                {/* Guide frame */}
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="h-[58%] w-[90%] rounded-lg border-2 border-dashed border-white/60" />
+            <div className="relative overflow-hidden rounded-lg bg-black">
+              <video ref={videoRef} className="h-auto w-full object-cover" playsInline muted />
+
+              {/* Guide overlay with detection feedback */}
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div
+                  className={`relative h-[58%] w-[90%] rounded-lg border-2 border-dashed transition-colors duration-300 ${guideColor}`}
+                >
+                  {/* Countdown badge */}
+                  {countdown !== null && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/80 text-3xl font-black text-white shadow-lg">
+                        {countdown}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={step === "front" ? handleCaptureFront : handleCaptureBack}
-                className="mx-auto mt-5 flex items-center gap-2 rounded-full bg-white px-8 py-3 text-base font-bold text-black hover:bg-gray-100 active:scale-95"
-              >
-                <Camera size={20} />
-                Chụp ảnh
-              </button>
-            </>
+
+              {/* Status text inside frame */}
+              {countdown === null && (
+                <div className="absolute bottom-3 left-0 right-0 flex justify-center">
+                  <span className="rounded-full bg-black/60 px-3 py-1 text-xs text-white/80">
+                    Đang nhận diện thẻ...
+                  </span>
+                </div>
+              )}
+              {countdown !== null && (
+                <div className="absolute bottom-3 left-0 right-0 flex justify-center">
+                  <span className="rounded-full bg-green-600/80 px-3 py-1 text-xs font-semibold text-white">
+                    Đã phát hiện thẻ — giữ yên...
+                  </span>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -204,7 +330,6 @@ export default function CccdScanner({ onResult, onClose }) {
       {step === "confirm" && (
         <div className="flex w-full max-w-2xl flex-col gap-4 px-4">
           <div className="flex gap-3">
-            {/* Front preview */}
             <div className="flex-1">
               <p className="mb-1 text-center text-xs font-semibold text-gray-300">Mặt trước</p>
               <div className="relative overflow-hidden rounded-lg">
@@ -218,7 +343,6 @@ export default function CccdScanner({ onResult, onClose }) {
                 </button>
               </div>
             </div>
-            {/* Back preview */}
             <div className="flex-1">
               <p className="mb-1 text-center text-xs font-semibold text-gray-300">Mặt sau</p>
               <div className="relative overflow-hidden rounded-lg">
