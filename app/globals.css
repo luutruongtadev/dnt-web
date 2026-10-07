@@ -4,3 +4,8 @@
 @import "../index.css";
 @import "../App.css";
 @import "../styles/body.css";
+
+/* Default font from the old Vite index.html. */
+body {
+  font-family: "Times New Roman", Times, serif;
+}

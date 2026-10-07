@@ -1,23 +1,25 @@
 import axios from 'axios';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337/api";
+
 /**
- * Upload image to Cloudinary
+ * Upload an image via the app's own /api/upload endpoint, which stores it on
+ * Supabase Storage (replaces the old direct-to-Cloudinary upload).
  * @param file The image file (from input type="file" or others)
- * @returns URL string of uploaded image
+ * @returns URL string of the uploaded image (same contract as before)
  */
-export const uploadImageToCloudinary = async (file)=> {
-  const cloudName = 'dz43kod4r'; // Thay cloudName nếu cần
-  const uploadPreset = 'dainghaitin'; // Phải tạo sẵn upload_preset trong Cloudinary
-
-  const url = `https://api.cloudinary.com/v1_1/${cloudName}/upload`;
-
+export const uploadImage = async (file) => {
   const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', uploadPreset);
+  formData.append('files', file);
 
-  const response = await axios.post(url, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+  const response = await axios.post(`${API_URL}/upload`, formData, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
-  return response.data.secure_url; // Trả về link ảnh sau khi upload
+  const first = Array.isArray(response.data) ? response.data[0] : response.data;
+  return first?.url;
 };
+
+// Backwards-compatible alias — existing callers import this name.
+export const uploadImageToCloudinary = uploadImage;

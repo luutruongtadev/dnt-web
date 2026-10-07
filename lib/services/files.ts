@@ -15,7 +15,7 @@ export async function createFileEntry(
         document_id: genDocumentId(),
         name,
         url,
-        provider: options.provider || "cloudinary",
+        provider: options.provider || "supabase",
         mime: options.mime || "image/jpeg",
         size: options.size ?? 0,
         hash: options.hash || name,
