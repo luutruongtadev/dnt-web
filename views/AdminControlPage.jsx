@@ -2,10 +2,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from '@/lib/router-compat';
 import { useSelector } from "react-redux";
-import { ChevronDown, ChevronUp, MapPin, Minus, Plus, RefreshCw, ScanLine, X } from "lucide-react";
-import { extractSideDocumentImage, extractSideInputImage } from "@microblink/blinkid";
+import { ChevronDown, ChevronUp, MapPin, Minus, Plus, ScanLine } from "lucide-react";
 import PageHeaderWithOutColorPicker from "../components/PageHeaderWithOutColorPicker";
-import useBlinkIdScanner from "../components/MicrolinkIDScanner";
+import CccdScanner from "../components/CccdScanner";
 import { useTranslation } from 'react-i18next';
 import { getSessions, toggleSessionStatus, updateCurrentAddress } from "../services/authService";
 import { createOrUpdateBusiness, getMyBusiness, uploadDocumentToStrapi, getMyDocuments, verifyMyBusiness } from "../services/businessService";
@@ -14,40 +13,8 @@ import MapPickerModal from "../components/contact/MapPickerModal";
 
 const MOCK_VERIFICATION = String(process.env.NEXT_PUBLIC_MOCK_VERIFICATION || "false").toLowerCase() === "true";
 
-const ADMIN_BLINK_SCANNING_SETTINGS = {
-  returnInputImages: true,
-  scanCroppedDocumentImage: true,
-  croppedImageSettings: {
-    returnDocumentImage: true,
-    returnFaceImage: true,
-    returnSignatureImage: true,
-  },
-};
-
-const ADMIN_BLINK_FEEDBACK_OPTIONS = {
-  showOnboardingGuide: false,
-  showHelpButton: true,
-};
-
 // Account types collected on the registration page (see RegisterAccountTypeSelect)
 const BUSINESS_ACCOUNT_TYPES = ["ho_kinh_doanh", "doanh_nghiep"];
-
-const imageDataToDataUrl = (imageData) => {
-  if (!imageData) return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = imageData.width;
-  canvas.height = imageData.height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.putImageData(imageData, 0, 0);
-  return canvas.toDataURL("image/png");
-};
-
-const getBlinkStringValue = (field) => {
-  if (!field) return "";
-  if (typeof field === "string") return field;
-  return field.latin?.value || field.cyrillic?.value || field.greek?.value || field.arabic?.value || "";
-};
 
 // The name on the CCCD / business registration must match the bank account holder,
 // so compare without diacritics, casing or extra spacing.
@@ -226,7 +193,6 @@ export default function AdminControlPage() {
   const [cccdBackFileId, setCccdBackFileId] = useState(null);
   const [hasIdCaptured, setHasIdCaptured] = useState(false);
   const [showIdScanner, setShowIdScanner] = useState(false);
-  const [scannerStarting, setScannerStarting] = useState(false);
   const [scannerError, setScannerError] = useState("");
   const [cccdScanInfo, setCccdScanInfo] = useState(null);
   const [nameMismatchError, setNameMismatchError] = useState("");
@@ -271,27 +237,19 @@ export default function AdminControlPage() {
   // Verification is complete when every document required for this account type is captured
   const verificationComplete = hasIdCaptured && (!requiresBusinessDoc || hasBusinessVideo);
 
-  const closeIdScanner = useCallback(async () => {
-    await idScannerDestroyRef.current?.();
+  const closeIdScanner = useCallback(() => {
     setShowIdScanner(false);
-    setScannerStarting(false);
+    setScannerError("");
   }, []);
 
-  const handleBlinkIdResult = useCallback(async (result) => {
-    const frontImage = extractSideDocumentImage(result, "first") || extractSideInputImage(result, "first");
-    const backImage = extractSideDocumentImage(result, "second") || extractSideInputImage(result, "second");
-    const frontDataUrl = imageDataToDataUrl(frontImage);
-    const backDataUrl = imageDataToDataUrl(backImage);
-
+  const handleCccdResult = useCallback(async ({ fullName, idNumber, frontDataUrl, backDataUrl }) => {
     if (!frontDataUrl || !backDataUrl) {
-      setScannerError("Chưa lấy được đủ ảnh CCCD hai mặt. Vui lòng quét lại và làm theo hướng dẫn lật thẻ.");
+      setScannerError("Chưa lấy được đủ ảnh CCCD hai mặt. Vui lòng quét lại.");
       return;
     }
 
-    const scannedName = getBlinkStringValue(result.fullName);
-
     // The scanned name must match the bank account holder before anything is uploaded
-    if (bankAccountHolder && scannedName && normalizeName(scannedName) !== normalizeName(bankAccountHolder)) {
+    if (bankAccountHolder && fullName && normalizeName(fullName) !== normalizeName(bankAccountHolder)) {
       setNameMismatchError(t('adminControl.nameMismatch', { expected: bankAccountHolder }));
       setScannerError(t('adminControl.nameMismatch', { expected: bankAccountHolder }));
       return;
@@ -300,43 +258,14 @@ export default function AdminControlPage() {
     setNameMismatchError("");
     setCccdFrontDataUrl(frontDataUrl);
     setCccdBackDataUrl(backDataUrl);
-    setCccdScanInfo({
-      fullName: scannedName,
-      idNumber: getBlinkStringValue(result.personalIdNumber) || getBlinkStringValue(result.documentNumber),
-    });
+    setCccdScanInfo({ fullName: fullName || "", idNumber: idNumber || "" });
 
     const [frontOk, backOk] = await Promise.all([
       uploadCapturedPhoto(frontDataUrl, "cccd_front"),
       uploadCapturedPhoto(backDataUrl, "cccd_back"),
     ]);
     if (frontOk && backOk) setHasIdCaptured(true);
-    await closeIdScanner();
-  }, [closeIdScanner, bankAccountHolder, t]);
-
-  const handleBlinkIdError = useCallback((error) => {
-    console.error("BlinkID scan error:", error);
-    setScannerError("Không thể quét CCCD. Vui lòng thử lại hoặc kiểm tra quyền camera/license.");
-    setScannerStarting(false);
-  }, []);
-
-  const {
-    containerRef: idScannerContainerRef,
-    initialize: initializeIdScanner,
-    destroy: destroyIdScanner,
-    isReady: isIdScannerReady,
-  } = useBlinkIdScanner({
-    onResult: handleBlinkIdResult,
-    onError: handleBlinkIdError,
-    scanningMode: "automatic",
-    scanningSettings: ADMIN_BLINK_SCANNING_SETTINGS,
-    feedbackUiOptions: ADMIN_BLINK_FEEDBACK_OPTIONS,
-  });
-
-  const idScannerDestroyRef = useRef(destroyIdScanner);
-
-  useEffect(() => {
-    idScannerDestroyRef.current = destroyIdScanner;
-  }, [destroyIdScanner]);
+  }, [bankAccountHolder, t]);
 
   // Set video srcObject after camera modal mounts
   useEffect(() => {
@@ -358,7 +287,6 @@ export default function AdminControlPage() {
   const openIdScanner = () => {
     setScannerError("");
     setShowIdScanner(true);
-    setScannerStarting(true);
   };
 
   const mockBusinessRegCapture = () => {
@@ -415,20 +343,6 @@ export default function AdminControlPage() {
       return false;
     }
   };
-
-  useEffect(() => {
-    if (!showIdScanner) return;
-    const timeoutId = window.setTimeout(async () => {
-      try {
-        await initializeIdScanner();
-      } catch (error) {
-        handleBlinkIdError(error);
-      } finally {
-        setScannerStarting(false);
-      }
-    }, 100);
-    return () => window.clearTimeout(timeoutId);
-  }, [showIdScanner, initializeIdScanner, handleBlinkIdError]);
 
   const capturePhoto = async () => {
     if (!videoRef.current) return;
@@ -1227,37 +1141,12 @@ export default function AdminControlPage() {
       </div>
     )}
 
-    {/* BlinkID CCCD Scanner Modal */}
+    {/* CCCD Scanner Modal */}
     {showIdScanner && (
-      <div className="admin-id-scanner-modal fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/90 p-4">
-        <button
-          type="button"
-          onClick={closeIdScanner}
-          className="absolute right-4 top-4 z-10 rounded bg-white/10 p-2 text-white hover:bg-white/20"
-          aria-label="Đóng quét CCCD"
-        >
-          <X size={28} />
-        </button>
-        <div className="mb-3 max-w-[900px] px-12 text-center text-white">
-          <h2 className="text-2xl font-bold leading-tight">Quét CCCD hai mặt</h2>
-          <p className="mt-1 text-base leading-snug text-gray-300">{t('adminControl.frameGuide')} — đưa CCCD vào khung, giữ rõ nét, rồi lật mặt sau khi hệ thống yêu cầu.</p>
-        </div>
-        <div
-          ref={idScannerContainerRef}
-          className="admin-id-scanner-host flex w-full flex-col items-center"
-        />
-        {(scannerStarting || !isIdScannerReady) && !scannerError && (
-          <div className="mt-4 flex items-center gap-3 text-sm text-white">
-            <RefreshCw className="animate-spin" size={22} />
-            Đang khởi động camera...
-          </div>
-        )}
-        {scannerError && (
-          <div className="mt-3 w-full max-w-[960px] border-2 border-red-500 bg-red-50 px-3 py-2 text-center text-sm font-bold text-red-700">
-            {scannerError}
-          </div>
-        )}
-      </div>
+      <CccdScanner
+        onResult={handleCccdResult}
+        onClose={closeIdScanner}
+      />
     )}
 
     {/* Map picker for the current address pin */}

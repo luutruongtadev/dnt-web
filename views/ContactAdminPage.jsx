@@ -40,7 +40,7 @@ import {
 } from 'lucide-react';
 
 import { useNavigate } from '@/lib/router-compat';
-import useBlinkIdScanner from '../components/MicrolinkIDScanner';
+import CccdScanner from '../components/CccdScanner';
 import {
   verifyRecoveryAccount,
   verifyRecoveryKey,
@@ -159,15 +159,12 @@ function BotChatPanel({ onVideoCalls, onGoLogin }) {
   const [verificationAttempts, setVerificationAttempts] = useState(0);
 
   // ── Microblink scanning logic ──────────────────────────────────────────────
-  const onScanResult = useCallback(async (result) => {
-    if (result.state === 1 /* RecognizerResultState.Empty */) return;
-
+  const onScanResult = useCallback(async ({ fullName: fullNameRaw, idNumber: idNumberRaw }) => {
     setIsScanModalOpen(false);
     setInputDisabled(true);
 
-    // Result extraction based on BlinkIDCombinedRecognizer structure
-    const fullName = result.fullName || "";
-    const idNumber = result.personalNumber || result.documentNumber || "";
+    const fullName = fullNameRaw || "";
+    const idNumber = idNumberRaw || "";
 
     if (idNumber) {
       push('system', `📄 Đã quét ID: ${idNumber}`);
@@ -199,18 +196,6 @@ function BotChatPanel({ onVideoCalls, onGoLogin }) {
       }
     }
   }, [onVideoCalls]);
-
-  const onScanError = useCallback((error) => {
-    console.error("Scanning Error:", error);
-    setIsScanModalOpen(false);
-    alert("Lỗi quét ID. Vui lòng thử lại.");
-  }, []);
-
-  const { containerRef, initialize, destroy, isReady } = useBlinkIdScanner({
-    onResult: onScanResult,
-    onError: onScanError,
-    scanningMode: "BlinkIdCombined", // Adjust if needed
-  });
 
   const hasInitialized = useRef(false);
   const inputRef = useRef(null);
@@ -400,13 +385,8 @@ function BotChatPanel({ onVideoCalls, onGoLogin }) {
 
   // runVerify logic is now integrated into each individual step, but keeping the comment placeholder
 
-  // ── CCCD capture handler ──────────────────────────────────────────────────
-  const handleCccdCapture = async () => {
+  const handleCccdCapture = () => {
     setIsScanModalOpen(true);
-    // Use setTimeout to ensure the container is rendered before initialization
-    setTimeout(() => {
-      initialize();
-    }, 100);
   };
 
   const onKeyDown = (e) => {
@@ -544,38 +524,11 @@ function BotChatPanel({ onVideoCalls, onGoLogin }) {
         </div>
       )}
 
-      {/* ID Scanning Overlay using MicrolinkIDScanner hook */}
       {isScanModalOpen && (
-        <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center">
-          <div className="absolute top-4 right-4 z-[10000]">
-            <button
-              onClick={() => {
-                destroy();
-                setIsScanModalOpen(false);
-              }}
-              className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
-            >
-              <X size={32} className="text-white" />
-            </button>
-          </div>
-          <div className="text-white mb-6 text-center px-4">
-            <h2 className="text-xl font-bold mb-2">Đang quét CCCD</h2>
-            <p className="text-sm text-gray-400">Vui lòng đưa thẻ CCCD vào khung hình để hệ thống tự động xử lý</p>
-          </div>
-
-          {/* THE TARGET CONTAINER FOR MICROBLINK UI */}
-          <div
-            ref={containerRef}
-            className="w-full max-w-2xl px-4 flex flex-col items-center"
-          />
-
-          {!isReady && (
-            <div className="flex flex-col items-center gap-4 mt-8">
-              <RefreshCw className="text-blue-500 animate-spin" size={40} />
-              <p className="text-white text-sm">Đang khởi động Camera...</p>
-            </div>
-          )}
-        </div>
+        <CccdScanner
+          onResult={onScanResult}
+          onClose={() => setIsScanModalOpen(false)}
+        />
       )}
     </>
   );

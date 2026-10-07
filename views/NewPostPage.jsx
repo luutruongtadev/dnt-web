@@ -11,8 +11,7 @@ import {
     Camera as CameraIcon,
 } from "lucide-react";
 import PostTypeMenu from "../components/PostTypeMenu";
-import useBlinkIdScanner from "../components/MicrolinkIDScanner";
-import {extractSideDocumentImage} from "@microblink/blinkid";
+import CccdScanner from "../components/CccdScanner";
 import PageHeaderWithOutColorPicker from "../components/PageHeaderWithOutColorPicker.jsx";
 import { getMyBusiness } from "../services/businessService";
 
@@ -36,6 +35,7 @@ export default function NewPostPage() {
     const [cccdCheckDone, setCccdCheckDone] = useState(false);
     const [hasIdCaptured, setHasIdCaptured] = useState(false);
     const [idPhotoDataUrl, setIdPhotoDataUrl] = useState(null);
+    const [showCccdScanner, setShowCccdScanner] = useState(false);
     const [hasBusinessVideo, setHasBusinessVideo] = useState(false);
     const [businessVideoUrl, setBusinessVideoUrl] = useState(null);
     const [isVideoMode, setIsVideoMode] = useState(false);
@@ -116,20 +116,6 @@ export default function NewPostPage() {
             }
         }, "image/png");
     };
-
-    const {scanId, toggle} = useBlinkIdScanner({
-        onSuccess: (result) => {
-            setHasIdCaptured(true);
-            setIdPhotoDataUrl(result.faceImage);
-            console.log(result);
-            closeCamera();
-        },
-        onError: (error) => {
-            console.error("BlinkID Scan Error:", error);
-            alert(t("scanner.error"));
-            closeCamera();
-        },
-    });
 
     const handleChangeColor = (e) => {
         const newColor = e.target.value;
@@ -347,6 +333,7 @@ export default function NewPostPage() {
     }
 
     return (
+        <>
         <div className="flex justify-center items-center min-h-screen">
             <div className="bg-transparent backdrop-blur-md rounded-lg w-full max-w-4xl mx-auto">
                 <PageHeaderWithOutColorPicker
@@ -384,7 +371,7 @@ export default function NewPostPage() {
                                     e.preventDefault();
                                     mockIdCapture();
                                 } else {
-                                    toggle(e);
+                                    setShowCccdScanner(true);
                                 }
                             }}
                         >
@@ -546,5 +533,16 @@ export default function NewPostPage() {
                 )}
             </div>
         </div>
+        {showCccdScanner && (
+            <CccdScanner
+                onResult={({ frontDataUrl }) => {
+                    setIdPhotoDataUrl(frontDataUrl);
+                    setHasIdCaptured(true);
+                    setShowCccdScanner(false);
+                }}
+                onClose={() => setShowCccdScanner(false)}
+            />
+        )}
+        </>
     );
 }
