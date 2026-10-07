@@ -1,0 +1,119 @@
+html, body {
+    margin: 0;
+    padding: 0;
+}
+
+/* Always-visible visual scrollbar (fake track) for horizontal scrollers */
+.overflow-x-auto-scroll {
+  overflow-x: auto;
+  position: relative;
+  padding-bottom: 12px; /* reserve space for the fake track */
+  scrollbar-width: none; /* hide native on Firefox */
+  cursor: grab; /* indicate drag to scroll */
+}
+.overflow-x-auto-scroll::-webkit-scrollbar {
+  height: 0px; /* hide native on WebKit */
+}
+
+/* Decorative track */
+.scrollbar-track {
+  position: sticky;
+  left: 0;
+  bottom: 0;
+  height: 6px;
+  width: 100%;
+  background: linear-gradient(90deg, #e5e7eb 0%, #cbd5e1 50%, #94a3b8 100%);
+  border-radius: 9999px;
+  
+  pointer-events: auto; /* allow thumb to receive events */
+  z-index: 5;
+}
+
+/* Moving thumb */
+.scrollbar-thumb {
+  position: absolute;
+  height: 100%;
+  background: #2563eb; /* blue */
+  border-radius: 9999px;
+  
+  transform: translateX(0);
+  transition: transform 80ms linear, width 80ms linear, opacity 120ms ease;
+  pointer-events: auto;
+  cursor: grab;
+}
+
+/* Live goods table fixed column width (except STT) */
+.live-goods-col-fixed {
+  width: 250px;
+  min-width: 250px;
+  max-width: 250px;
+}
+
+/* Fade in animation for success/error messages */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.admin-id-scanner-host {
+  width: min(1100px, 96vw);
+  height: min(760px, 72vh);
+  min-height: 520px;
+}
+
+.admin-id-scanner-host > * {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
+.admin-id-scanner-host #camera-manager {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.admin-id-scanner-host *::part(capture-screen-part) {
+  min-height: 520px;
+  height: 100%;
+}
+
+.admin-id-scanner-host *::part(video-element-part) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media screen and (max-width: 768px) {
+  .admin-id-scanner-modal {
+    justify-content: flex-start;
+    padding: 12px;
+  }
+
+  .admin-id-scanner-host {
+    width: 100%;
+    height: 74vh;
+    min-height: 460px;
+  }
+
+  .admin-id-scanner-host *::part(capture-screen-part) {
+    min-height: 460px;
+  }
+
+  .admin-id-scanner-modal h2 {
+    font-size: 22px;
+  }
+
+  .admin-id-scanner-modal p {
+    font-size: 14px;
+  }
+}

@@ -1,0 +1,315 @@
+.grid-container {
+    /* display: grid;
+    grid-template-columns: repeat(3, auto) ; 
+    grid-template-rows: auto; */
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    gap: 0px 0px;
+    margin: 0;
+    align-items: stretch;
+}
+
+@media screen and (max-width: 768px) {
+    .grid-container {
+        margin-bottom: 30px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+    }
+
+
+
+
+}
+
+.hove:hover {
+    background-color: #4e79de;
+}
+
+
+/* GRID COL 1 */
+.grid-col-1 {
+    display: flex;
+    flex-direction: column;
+    width: 5%;
+    /* justify-content: center; */
+    max-width: 100%;
+}
+
+@media screen and (max-width: 768px) {
+    .grid-col-1 {
+        width: 8%;
+        min-width: 60px;
+    }
+}
+
+.grid-col-1 div {
+    /* border: 1px solid black; */
+    /* padding: 8px; */
+    /* max-width: 200px; */
+    /* width: 100px !important; */
+    /* min-height:clamp(30px, 3vw, 50px); */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.grid-col-1 div>p {
+    margin: 0;
+}
+
+.grid-col-2 {
+    border: 1px solid black;
+    max-width: 100%;
+    /* width: 180px; */
+    /* width: 60%; */
+    /* aspect-ratio:/3; */
+    /* aspect-ratio: 3/1; */
+    /* border: 1px solid black; */
+    flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.cursor-pointer:hover {
+    background-color: #4e79de !important;
+    cursor: pointer;
+}
+
+@media screen and (max-width: 768px) {
+    .grid-col-2 {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+.grid-col-2 img {
+    width: 80%;
+    height: 40%;
+    border-radius: 90%;
+    object-fit: cover;
+    border: 6px solid rgb(10, 13, 64);
+}
+
+/* GRID COL 3 */
+.grid-col-3 {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+@media screen and (max-width: 768px) {
+    .grid-col-3 {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+.grid-col-3-title {
+    border: 1px solid black;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+}
+
+.grid-col-3-title h1,
+h2 {
+    margin: 0;
+}
+
+.grid-col-3-info {
+    border: 1px solid black;
+    display: grid;
+    grid-template-columns: auto auto auto auto;
+    grid-template-rows: auto auto auto;
+
+}
+
+.grid-col-3-info div {
+    margin: 0;
+    border: 1px solid black;
+    /* max-width: 200px; */
+    display: flex;
+    flex-direction: column;
+    align-items: baseline;
+    justify-content: center;
+}
+
+.grid-col-3-info div>p {
+    margin: 0;
+    padding: 4PX;
+}
+
+.grid-col-3-address {
+    border: 1px solid black;
+    background-color: yellow;
+    min-width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* GRID COL 4 */
+
+.grid-col-4 {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    width: clamp(52%, 52%, 100%);
+}
+
+@media screen and (max-width: 768px) {
+    .grid-col-4 {
+        display: none;
+    }
+}
+
+.grid-col-4 div {
+    /* Remove border for HeroHeader content */
+    /* border: 1px solid black; */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    /* padding: 4PX; */
+}
+
+.grid-col-4 div>p {
+    margin: 0;
+
+}
+
+/* Additional mobile styles for CompanyInfoTable */
+@media screen and (max-width: 480px) {
+    .company-info-table {
+        font-size: 10px !important;
+    }
+
+    .company-info-table td {
+        padding: 2px !important;
+        line-height: 1.2 !important;
+    }
+
+    .company-info-table .label-cell {
+        font-size: 9px !important;
+        font-weight: bold;
+    }
+
+    .company-info-table .data-cell {
+        font-size: 9px !important;
+    }
+}
+
+td {
+    height: 26px;
+    max-width: 1vw;
+}
+
+@media screen and (max-width: 500px) {
+    .company-info-table {
+        font-size: 8px !important;
+    }
+
+    .company-info-table td {
+        padding: 1px !important;
+    }
+
+    .company-info-table .label-cell,
+    .company-info-table .data-cell {
+        font-size: 8px !important;
+    }
+
+    .avt {
+        display: none !important;
+    }
+
+    .avtblock {
+        display: none !important;
+    }
+
+    .appicon {
+        display: none !important;
+    }
+
+    .hero-title {
+        margin-top: -16px !important;
+    }
+
+    .menu-left-top {
+        width: 7vw;
+        padding-top: 0px !important;
+    }
+
+    .filter-container {
+        margin-top: 2vh !important;
+    }
+
+    .filter-item {
+        font-size: clamp(6px, 0.75vw, 14px) !important;
+        padding: 1px !important;
+        border: 1px solid black !important;
+    }
+
+    .auth-dropdown {
+        top: 10rem !important;
+    }
+    .tab{
+        font-size: 10px !important;
+    }
+    .new-ailive-post-page{
+        font-size: 10px !important;
+    }
+}
+.acctab{
+    min-width: 150px !important;
+}
+
+.menu-left-top-login {
+    width: 3vw;
+    padding-top: 27px !important;
+}
+
+.info-cell {
+    width: 10%;
+    max-width: 100px !important;
+    font-size: 1.7vh !important;
+}
+
+@keyframes marquee {
+    0% {
+        transform: translateX(100%);
+    }
+
+    100% {
+        transform: translateX(-100%);
+    }
+}
+
+.marquee-wrapper {
+    display: inline-flex;
+    animation: marquee 20s linear infinite;
+}
+
+/* Pause when hover any card */
+.marquee-wrapper:hover {
+    animation-play-state: paused;
+}
+
+td {
+    width: 10%;
+    max-width: 100px !important;
+}
+
+.row-h {
+    @apply h-[23px] flex items-center;
+}
+
+.table-cell {
+    flex: 0.7;
+}

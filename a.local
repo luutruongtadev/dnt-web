@@ -1,0 +1,8 @@
+# Dev: point the migrated frontend at the still-running Strapi backend.
+NEXT_PUBLIC_API_URL=/api
+NEXT_PUBLIC_REACT_APP_QRLOGIN_PATH=/qr-login
+NEXT_PUBLIC_REACT_APP_ENABLE_PASSWORD_GATE=false
+DATABASE_URL=postgresql://postgres.nqxnvwauxfymwuewhbio:Tuitenta%4011@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+DIRECT_DATABASE_URL=postgresql://postgres.nqxnvwauxfymwuewhbio:Tuitenta%4011@aws-1-ap-south-1.pooler.supabase.com:5432/postgres
+JWT_SECRET=f488e43ed646b8876c19df2b54f3201074d45a490af99a916134efc541d0865a
+RECAPTCHA_ENABLED=false
