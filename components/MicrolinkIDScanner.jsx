@@ -51,7 +51,8 @@ export default function useBlinkIdScanner(options = {}) {
       cameraManagerUiOptions,
       feedbackUiOptions,
       microblinkProxyUrl,
-      resourcesLocation,
+      // SDK resolves `resources/...` relative to this; the page URL breaks on nested routes
+      resourcesLocation: resourcesLocation ?? `${window.location.origin}/`,
       wasmVariant,
       useLightweightBuild,
       userId,
