@@ -1,12 +1,14 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useNavigate } from '@/lib/router-compat'
 import { useTranslation } from "react-i18next"
 import { Eye, Flag, Handshake, UserCheck, ArrowRight, Save, Share2 } from "lucide-react"
 import ContactListModal from "../components/molecules/ContactListModal.jsx"
 import ViolationReportModal from "../components/molecules/ViolationReportModal.jsx"
 import LiveGoodsTable from "../components/organisms/LiveGoodsTable.jsx"
-import { getLiveGoodsSession, getProductById, joinLiveGoodsSession, submitLiveGoodsBid } from "../services/productService.js"
+import { decideLiveGoodsBid, getLiveGoodsSession, getProductById, joinLiveGoodsSession, submitLiveGoodsBid } from "../services/productService.js"
+
+const CONFIRM_WINDOW_MS = 5 * 60 * 1000
 
 const getStoredUser = () => {
   try {
@@ -41,11 +43,8 @@ export default function AiLiveVideoDetailPage() {
   const [showShare, setShowShare] = useState(false)
   const [showReport, setShowReport] = useState(false)
   const [isFollowed, setIsFollowed] = useState(false)
-  const [confirmSeconds, setConfirmSeconds] = useState(300)
-  const [locked, setLocked] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
   const [shareCount, setShareCount] = useState(0)
-  const [audioOn, setAudioOn] = useState(false)
   const [product, setProduct] = useState(null)
   const [videoUrl, setVideoUrl] = useState("")
   const [loadingVideo, setLoadingVideo] = useState(false)
@@ -54,7 +53,6 @@ export default function AiLiveVideoDetailPage() {
   const [liveError, setLiveError] = useState("")
   const [joining, setJoining] = useState(false)
   const [submittingBidKey, setSubmittingBidKey] = useState(null)
-  const [ownerDecision] = useState("none")
   const [minimized, setMinimized] = useState(false)
   const [posterTableOpen, setPosterTableOpen] = useState(true)
   const [joinerTableOpen, setJoinerTableOpen] = useState(true)
@@ -180,6 +178,17 @@ export default function AiLiveVideoDetailPage() {
     }
   }
 
+  const handleDecide = async (bidId, decision) => {
+    if (!liveProductId || !isPoster) return
+    try {
+      const response = await decideLiveGoodsBid(liveProductId, bidId, decision, localStorage.getItem("authToken"))
+      setLiveSession(response.data?.data?.session || null)
+      setLiveError("")
+    } catch (err) {
+      setLiveError(err.message || t("aiLiveVideo.decideError", "Không gửi được phản hồi."))
+    }
+  }
+
   const beep = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)()
@@ -206,25 +215,20 @@ export default function AiLiveVideoDetailPage() {
     setIsSaved(!isSaved)
   }
 
+  // Quá 5 phút mà chủ bài đăng chưa xác nhận giá của người tham gia thì chỉ video của
+  // chủ bài đăng kêu pip pip; video bên người tham gia hoạt động bình thường (không kêu).
+  const bidsRef = useRef(bids)
+  useEffect(() => { bidsRef.current = bids }, [bids])
   useEffect(() => {
-    if (locked) return
-    const id = setInterval(() => setConfirmSeconds((s) => Math.max(0, s - 1)), 1000)
+    if (!isPoster) return undefined
+    const id = setInterval(() => {
+      const overdue = bidsRef.current.some((bid) => (
+        !bid.decision && Date.now() - new Date(bid.createdAt).getTime() > CONFIRM_WINDOW_MS
+      ))
+      if (overdue) beep()
+    }, 10000)
     return () => clearInterval(id)
-  }, [locked])
-
-  useEffect(() => {
-    if (confirmSeconds <= 0) {
-      setLocked(true)
-      return
-    }
-    if (confirmSeconds <= 120 && !audioOn) setAudioOn(true)
-  }, [audioOn, confirmSeconds])
-
-  useEffect(() => {
-    if (!audioOn) return
-    const id = setInterval(() => beep(), 10000)
-    return () => clearInterval(id)
-  }, [audioOn])
+  }, [isPoster])
 
   useEffect(() => {
     loadLiveSession()
@@ -371,7 +375,7 @@ export default function AiLiveVideoDetailPage() {
                 onClick={handleJoinLive}
                 className={`border border-black px-4 py-2 text-sm font-bold ${hasJoined ? "bg-green-200" : "bg-yellow-100"} disabled:cursor-not-allowed`}
               >
-                {joining ? t("common.loading", "Đang tải...") : hasJoined ? t("aiLiveVideo.joined", "ĐÃ THAM GIA") : "THAM GIA"}
+                {joining ? t("common.loading", "Đang tải...") : "THAM GIA"}
               </button>
             </div>
           ) : (
@@ -382,19 +386,12 @@ export default function AiLiveVideoDetailPage() {
         </div>
       </div>
 
-      {!isPoster ? (
-        <div className="mt-4 border border-black bg-yellow-50 px-3 py-3 text-sm font-bold">
-          {hasJoined
-            ? t("aiLiveVideo.joinerHintJoined", "Bạn đã tham gia phiên live. Nhập số lượng, giá đặt và bấm XÁC NHẬN để đấu giá.")
-            : t("aiLiveVideo.joinerHint", "Bấm THAM GIA để vào phiên live trước khi đặt giá.")}
-        </div>
-      ) : null}
-
       {(isPoster ? posterTableOpen : hasJoined && joinerTableOpen) && (
         <LiveGoodsTable
           items={productItems}
           bids={bids}
           onConfirmBid={handleConfirmBid}
+          onDecide={handleDecide}
           submittingBidKey={submittingBidKey}
           mode={isPoster ? "poster" : "joiner"}
           onClose={() => (isPoster ? setPosterTableOpen(false) : setJoinerTableOpen(false))}
@@ -418,20 +415,6 @@ export default function AiLiveVideoDetailPage() {
           </div>
         </div>
       ) : null}
-      {!isPoster && hasJoined ? (
-        <div className="flex items-center justify-center mt-2">
-          {ownerDecision === "none" ? (
-            <div className="p-4 text-center font-bold" style={{ backgroundColor: "#e0f2fe", color: "#1e3a8a" }}>
-              {t("aiLiveVideo.waitingPoster", "CHỜ CHỦ PHIÊN PHẢN HỒI")}
-            </div>
-          ) : ownerDecision === "accepted" ? (
-            <div className="p-4 text-center font-bold" style={{ backgroundColor: "#0ea5e9", color: "#facc15" }}>{t("customerConfirm.approvedLeft", "ĐÃ DUYỆT (lệnh từ chủ bài đăng)")}</div>
-          ) : (
-            <div className="p-4 text-center font-bold" style={{ backgroundColor: "#ef4444", color: "#111827" }}>{t("customerConfirm.rejectedRight", "TỪ CHỐI (lệnh từ chủ bài đăng)")}</div>
-          )}
-        </div>
-      ) : null}
-
       <div className="grid grid-cols-3 mt-2">
         <div />
         <div className="p-2 text-center" style={{ backgroundColor: "#06b6d4", color: "#002855" }}>

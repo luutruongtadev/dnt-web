@@ -1,3 +1,4 @@
+import { audit } from "@/lib/services/audit";
 import { prisma } from "@/lib/db/prisma";
 import { Prisma } from "@prisma/client";
 import { roundMoney, isValidAmount, moneyEquals } from "@/lib/services/money";
@@ -349,6 +350,12 @@ async function recordMoneyEvent(data: {
   amount: number; transactionId: string; extra?: object;
 }) {
   const userId = data.wallet.user_id ? Number(data.wallet.user_id) : null;
+  await audit({
+    event: data.action,
+    actionBy: userId ?? data.wallet.cccd,
+    message: `${data.action} ${data.amount} (${data.transactionId})`,
+    data: { walletId: data.wallet.id, amount: data.amount, transactionId: data.transactionId, ...data.extra },
+  });
   if (!userId) return;
   try {
     await notify({ userId, templateCode: data.templateCode, data: { amount: data.amount, transactionId: data.transactionId, ...data.extra } });

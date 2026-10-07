@@ -76,6 +76,9 @@ export default function OtpModal({ open, onClose, onConfirm, title, duration = 3
           {title || t("common.enterOtp", "NHẬP OTP")}
         </div>
         <div className="p-3 space-y-3">
+          <div className="text-xs font-bold text-yellow-600 text-center">
+            {t("common.otpHint", "Nhập OTP của chủ tk đặt lúc đăng ký TK")}
+          </div>
           <input
             type="text"
             inputMode="numeric"

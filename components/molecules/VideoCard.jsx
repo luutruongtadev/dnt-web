@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react"
 import PropTypes from "prop-types"
-import { Eye, Handshake, Share2, Play } from "lucide-react"
+import { Eye, Handshake, Share2 } from "lucide-react"
 import OtpModal from "./OtpModal"
 import platformLogo from "../../assets/planet.jpg"
 
@@ -15,7 +15,11 @@ export default function VideoCard({ index, name, productId, viewers, saves, shar
 
   return (
     <div
-      className={`border ${selected ? "border-green-500" : "border-green-600"} rounded-sm flex flex-col w-full h-full px-2 py-2 text-left`}
+      role="button"
+      tabIndex={0}
+      onClick={() => setShowOtp(true)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowOtp(true) } }}
+      className={`border ${selected ? "border-green-500" : "border-green-600"} rounded-sm flex flex-col w-full h-full px-2 py-2 text-left cursor-pointer hover:bg-green-50`}
     >
       {/* Header: avatar người đăng (góc trái) trước tên hàng hóa; Logo nền tảng (góc phải) */}
       <div className="flex items-start justify-between gap-1">
@@ -30,44 +34,37 @@ export default function VideoCard({ index, name, productId, viewers, saves, shar
         )}
       </div>
 
-      <button type="button" onClick={onClick} className="flex flex-col text-left mt-1 hover:opacity-80">
+      {/* Chỉ hiển thị các thông số; bấm vào thẻ -> modal OTP -> đúng mới qua trang phát video */}
+      <div className="flex flex-col text-left mt-1">
         <div className="flex items-center gap-1 text-xs text-blue-700">
           <Handshake size={15} />
           <span>{saves}</span>
         </div>
         <div className="flex items-center gap-1 text-xs">
           <Eye size={15} />
-          <span>{viewers} đang xem</span>
+          <span>{viewers}</span>
         </div>
         <div className="flex items-center gap-1 text-xs text-blue-700">
           <Share2 size={15} />
           <span>{shares}</span>
         </div>
-        <div className="font-extrabold text-lg text-center">{index}</div>
-      </button>
+      </div>
 
-      {/* Phát: bấm -> mở modal OTP (có sẵn) -> đúng mới qua trang phát video */}
-      <button
-        type="button"
-        onClick={() => setShowOtp(true)}
-        className="flex items-center justify-center gap-1 text-sm mt-auto"
-      >
-        <Play size={14} className="text-blue-600" />
-        <span className="text-blue-600">Phát</span>
-      </button>
-
-      <OtpModal
-        open={showOtp}
-        onClose={() => setShowOtp(false)}
-        onConfirm={handleConfirmOtp}
-        title="NHẬP OTP ĐỂ PHÁT VIDEO"
-      />
+      {/* chặn sự kiện nổi bọt để bấm trong modal không mở lại modal */}
+      <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+        <OtpModal
+          open={showOtp}
+          onClose={() => setShowOtp(false)}
+          onConfirm={handleConfirmOtp}
+          title="NHẬP OTP ĐỂ PHÁT VIDEO"
+        />
+      </div>
     </div>
   )
 }
 
 VideoCard.propTypes = {
-  index: PropTypes.number.isRequired,
+  index: PropTypes.number,
   name: PropTypes.string,
   productId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   viewers: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),

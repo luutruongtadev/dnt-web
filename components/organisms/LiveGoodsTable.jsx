@@ -47,10 +47,12 @@ const colorForCustomer = (name, palette) => {
  *    và 1 nút XÁC NHẬN -> OTP ở dưới cùng.
  *  - poster (chủ bài đăng): HỒ SƠ ĐÁP ỨNG + cột XÁC NHẬN với 2 nút ĐỒNG Ý / TỪ CHỐI.
  */
-export default function LiveGoodsTable({ items = [], bids = [], onConfirmBid, mode = "joiner", onClose }) {
+// Chủ bài đăng có 5 phút để xác nhận giá của người tham gia
+const CONFIRM_WINDOW_SEC = 5 * 60
+
+export default function LiveGoodsTable({ items = [], bids = [], onConfirmBid, onDecide, mode = "joiner", onClose }) {
   const { t } = useTranslation()
-  const [decisions, setDecisions] = useState({})
-  const [seconds, setSeconds] = useState({})
+  const [now, setNow] = useState(() => Date.now())
   const [otpOpen, setOtpOpen] = useState(false)
   const [liveItems, setLiveItems] = useState(items)
 
@@ -65,51 +67,19 @@ export default function LiveGoodsTable({ items = [], bids = [], onConfirmBid, mo
     }, {})
   }, [bids])
 
-  // Phản hồi (ĐỒNG Ý/TỪ CHỐI) từ chủ bài đăng theo từng mặt hàng
-  const responseByItem = useMemo(() => {
-    return bids.reduce((acc, bid) => {
-      const key = bid.productItemDocumentId || bid.productItemId || bid.itemIndex
-      if (key !== undefined && bid.decision && acc[key] === undefined) acc[key] = bid.decision
-      return acc
-    }, {})
-  }, [bids])
-
-  // Chủ bài đăng: đồng hồ đếm ngược từng dòng; về 00:00 tự động TỪ CHỐI
+  // Đồng hồ đếm ngược 5 phút tính từ lúc người tham gia đặt giá (chưa có phản hồi)
   useEffect(() => {
-    if (mode !== "poster") return
-    setSeconds((prev) => {
-      const next = { ...prev }
-      items.forEach((item, index) => {
-        const k = keyOf(item, index)
-        if (next[k] === undefined) next[k] = 30 + index * 55
-      })
-      return next
-    })
-  }, [items, mode])
-
-  useEffect(() => {
-    if (mode !== "poster") return undefined
-    const timer = setInterval(() => {
-      setSeconds((prev) => {
-        const next = {}
-        for (const [k, v] of Object.entries(prev)) next[k] = Math.max(0, v - 1)
-        return next
-      })
-    }, 1000)
+    const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
-  }, [mode])
+  }, [])
 
-  useEffect(() => {
-    if (mode !== "poster") return
-    setDecisions((prev) => {
-      let changed = false
-      const next = { ...prev }
-      for (const [k, v] of Object.entries(seconds)) {
-        if (v <= 0 && !next[k]) { next[k] = "rejected"; changed = true }
-      }
-      return changed ? next : prev
-    })
-  }, [seconds, mode])
+  const secondsLeft = (bid) => {
+    const elapsed = Math.floor((now - new Date(bid.createdAt).getTime()) / 1000)
+    return Math.max(0, CONFIRM_WINDOW_SEC - elapsed)
+  }
+
+  // Còn dòng nào đang chờ chủ bài đăng xác nhận thì khóa nút XÁC NHẬN của người tham gia
+  const hasPendingBid = Object.values(latestBidByItem).some((bid) => !bid.decision)
 
   const uploadButton = (
     <button type="button" className="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600">
@@ -148,35 +118,38 @@ export default function LiveGoodsTable({ items = [], bids = [], onConfirmBid, mo
       {
         header: t("customerConfirm.title", "XÁC NHẬN"),
         render: (item, index) => {
-          const k = keyOf(item, index)
-          const decision = decisions[k]
-          const sec = seconds[k] ?? 0
+          const bid = bidOf(item, index)
+          if (!bid) return <span className="text-[10px] text-gray-500">—</span>
+          const decision = bid.decision
+          const sec = secondsLeft(bid)
+          if (decision) {
+            return (
+              <span className={`text-xs font-bold ${decision === "accepted" ? "text-blue-700" : "text-red-600"}`}>
+                {decision === "accepted" ? t("liveConfirm.agreed", "ĐÃ ĐỒNG Ý") : t("liveConfirm.rejected", "ĐÃ TỪ CHỐI")}
+              </span>
+            )
+          }
           return (
             <div className="flex flex-col items-center gap-1">
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setDecisions((prev) => ({ ...prev, [k]: "accepted" }))}
-                  className={`px-2 py-1 text-xs font-bold text-white ${decision === "accepted" ? "ring-2 ring-offset-1 ring-blue-800" : ""}`}
+                  onClick={() => onDecide?.(bid.id, "accepted")}
+                  className="px-2 py-1 text-xs font-bold text-white"
                   style={{ backgroundColor: "#1e40af" }}
                 >
                   {t("liveConfirm.agree", "ĐỒNG Ý")}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDecisions((prev) => ({ ...prev, [k]: "rejected" }))}
-                  className={`px-2 py-1 text-xs font-bold text-white ${decision === "rejected" ? "ring-2 ring-offset-1 ring-red-800" : ""}`}
+                  onClick={() => onDecide?.(bid.id, "rejected")}
+                  className="px-2 py-1 text-xs font-bold text-white"
                   style={{ backgroundColor: "#ef4444" }}
                 >
                   {t("liveConfirm.reject", "TỪ CHỐI")}
                 </button>
               </div>
               <span className={`text-sm font-bold tabular-nums ${sec <= 10 ? "text-red-600" : ""}`}>{formatCountdown(sec)}</span>
-              {decision && (
-                <span className={`text-[10px] font-bold ${decision === "accepted" ? "text-blue-700" : "text-red-600"}`}>
-                  {decision === "accepted" ? t("liveConfirm.agreed", "ĐÃ ĐỒNG Ý") : t("liveConfirm.rejected", "ĐÃ TỪ CHỐI")}
-                </span>
-              )}
             </div>
           )
         },
@@ -218,15 +191,29 @@ export default function LiveGoodsTable({ items = [], bids = [], onConfirmBid, mo
     },
     {
       header: `(29) ${t("liveGoods.responseProfile", "HỒ SƠ ĐÁP ỨNG")}`,
+      render: () => <div className="flex flex-col items-center gap-1">{uploadButton}</div>,
+    },
+    {
+      header: t("liveGoods.posterConfirm", "XÁC NHẬN CỦA CHỦ BÀI ĐĂNG"),
       render: (item, index) => {
-        const decision = responseByItem[item.documentId] ?? responseByItem[item.id] ?? responseByItem[index]
+        const bid = latestBidByItem[item.documentId] || latestBidByItem[item.id] || latestBidByItem[index]
+        if (!bid) return <span className="text-[10px] text-gray-500">—</span>
+        // Đã xác nhận: 1 ô chữ, bỏ đồng hồ
+        if (bid.decision) {
+          return (
+            <span className={`text-xs font-bold ${bid.decision === "accepted" ? "text-blue-700" : "text-red-600"}`}>
+              {bid.decision === "accepted" ? t("liveConfirm.agreed", "ĐÃ ĐỒNG Ý") : t("liveConfirm.rejected", "ĐÃ TỪ CHỐI")}
+            </span>
+          )
+        }
+        // Chưa xác nhận: 2 ô + đồng hồ đếm ngược 5 phút (người tham gia chỉ xem)
         return (
           <div className="flex flex-col items-center gap-1">
-            {uploadButton}
-            {/* hiển thị phản hồi từ chủ bài đăng (read-only) */}
-            {decision === "accepted" && <span className="text-xs font-bold text-blue-700">{t("liveConfirm.agree", "ĐỒNG Ý")}</span>}
-            {decision === "rejected" && <span className="text-xs font-bold text-red-600">{t("liveConfirm.reject", "TỪ CHỐI")}</span>}
-            {!decision && <span className="text-[10px] text-gray-500">{t("aiLiveVideo.waitingResponse", "Chờ phản hồi")}</span>}
+            <div className="flex items-center gap-1">
+              <span className="px-2 py-1 text-xs font-bold text-white" style={{ backgroundColor: "#1e40af" }}>{t("liveConfirm.agree", "ĐỒNG Ý")}</span>
+              <span className="px-2 py-1 text-xs font-bold text-white" style={{ backgroundColor: "#ef4444" }}>{t("liveConfirm.reject", "TỪ CHỐI")}</span>
+            </div>
+            <span className="text-sm font-bold tabular-nums text-red-600">{formatCountdown(secondsLeft(bid))}</span>
           </div>
         )
       },
@@ -265,8 +252,10 @@ export default function LiveGoodsTable({ items = [], bids = [], onConfirmBid, mo
       <div className="flex items-center justify-center mt-3">
         <button
           type="button"
+          disabled={hasPendingBid}
+          title={hasPendingBid ? t("liveGoods.waitPoster", "Chờ chủ bài đăng xác nhận") : undefined}
           onClick={() => setOtpOpen(true)}
-          className="border-2 border-black px-8 py-2 font-bold hover:bg-gray-50"
+          className="border-2 border-black px-8 py-2 font-bold hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500"
         >
           {t("customerConfirm.title", "XÁC NHẬN")}
         </button>

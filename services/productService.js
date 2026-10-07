@@ -217,6 +217,7 @@ const filterProducts = async (filters = {}, page = 1, pageSize = 10, authToken =
     if (filters.nation) params.nation = filters.nation;
     if (filters.province) params.province = filters.province;
     if (filters.name) params.name = filters.name;
+    if (filters.channel) params.channel = filters.channel;
     params.isEmptyPic = isEmptyPic;
 
     const response = await axios.get(`${API_URL}/products`, { 
@@ -302,5 +303,15 @@ const submitLiveGoodsBid = async (productId, bidData, authToken = null) => {
   }
 };
 
+const decideLiveGoodsBid = async (productId, bidId, decision, authToken = null) => {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    return await axios.post(`${API_URL}/products/${productId}/live-session/decision`, { bidId, decision }, { headers });
+  } catch (error) {
+    throw new Error(error.response?.data?.error?.message || "Failed to decide live bid");
+  }
+};
+
 export { createProduct, getProducts, getProductById, updateProduct, deleteProduct,
-  filterProducts, updateProductPriceInfo, getLiveGoodsSession, joinLiveGoodsSession, submitLiveGoodsBid };
+  filterProducts, updateProductPriceInfo, getLiveGoodsSession, joinLiveGoodsSession, submitLiveGoodsBid, decideLiveGoodsBid };

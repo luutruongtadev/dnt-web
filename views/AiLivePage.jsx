@@ -48,6 +48,7 @@ export default function AiLivePage() {
           onColorChange={handleChangeColor}
           titlePrefix="8"
           title={t('aiLive.pageTitle')}
+          compact
         />
 
         {/* 6 Buttons - compact row (kéo lên, kích thước nhỏ thôi) */}
@@ -64,8 +65,8 @@ export default function AiLivePage() {
                   key={idx}
                   className={
                     selectedComponent === item.value
-                      ? "bg-blue-600 text-white font-bold py-1.5 px-2 text-sm rounded-lg text-center transition-all"
-                      : "border border-gray-200 hover:bg-blue-50 hover:text-blue-700 text-black font-bold py-1.5 px-2 text-sm rounded-lg text-center transition-all"
+                      ? "bg-blue-600 text-white font-bold py-0.5 px-2 text-xs leading-tight whitespace-nowrap rounded-lg text-center transition-all"
+                      : "border border-gray-200 hover:bg-blue-50 hover:text-blue-700 text-black font-bold py-0.5 px-2 text-xs leading-tight whitespace-nowrap rounded-lg text-center transition-all"
                   }
                   onClick={() => {setSelectedComponent(item.value);}}
                 >

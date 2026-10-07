@@ -57,8 +57,20 @@ export default function AiLiveStreamGoods() {
     const [goodsGroups, setGoodsGroups] = useState([])
     const [goodsLoading, setGoodsLoading] = useState(false)
     const [goodsError, setGoodsError] = useState("")
-    const [isExpend, setIsExpend] = useState(false)
+    const [isExpend, setIsExpend] = useState(true)
     const authToken = typeof window !== "undefined" ? localStorage.getItem("authToken") : null
+    // AVT cố định: luôn là tài khoản đang đăng nhập, không đổi theo người mình theo dõi
+    const myAvatar = useMemo(() => {
+        try {
+            const u = JSON.parse(localStorage.getItem("user") || "{}")
+            return u?.avatar?.url || u?.avatar || ""
+        } catch {
+            return ""
+        }
+    }, [])
+    // Hiển thị 2-3 hàng ngang (5 video/hàng); bấm "Xem thêm" mới hiện thêm
+    const [visibleRows, setVisibleRows] = useState(3)
+    const CARDS_PER_ROW = 5
     // Số video livestream đăng mới mà mình chưa xem
     const [unseenCount] = useState(98765)
     useEffect(() => {
@@ -246,7 +258,7 @@ export default function AiLiveStreamGoods() {
                     <input
                         type="text"
                         value={searchText}
-                        onChange={(e) => setSearchText(e.target.value)}
+                        onChange={(e) => { setSearchText(e.target.value); setVisibleRows(3) }}
                         // placeholder={t('goods.searchPlaceholder')}
                         className="flex-1 p-2 rounded"
                     />
@@ -281,8 +293,9 @@ export default function AiLiveStreamGoods() {
                     className="col-span-2 flex items-center gap-1 cursor-pointer rounded p-1 hover:bg-gray-50"
                 >
                     <img
-                        src={activeUser?.avatar}
-                        className="w-12 h-12 rounded-full ring-1 ring-gray-300"
+                        src={typeof myAvatar === "string" && myAvatar ? myAvatar : undefined}
+                        alt=""
+                        className="w-12 h-12 rounded-full ring-1 ring-gray-300 bg-gray-100"
                     />
                     <span className="text-sm">2342958</span>
                 </div>
@@ -321,7 +334,10 @@ export default function AiLiveStreamGoods() {
                                     src={u.avatar}
                                     alt="avatar"
                                     className={`w-12 h-12 rounded-full ring-2 ${activeUserId === u.id ? "ring-blue-500" : "ring-gray-300"}`}
-                                    onClick={() => { setActiveUserId(u.id); setActiveStreamIndex(0) }}
+                                    onClick={() => {
+                                        // Chọn 1 người thì đến thư mục của họ
+                                        setActiveUserId(u.id); setActiveStreamIndex(0); setActiveTab('package')
+                                    }}
                                 />
                                 <button
                                     className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1"
@@ -368,6 +384,13 @@ export default function AiLiveStreamGoods() {
             )}
             {(activeTab === 'package' || activeTab === 'products') && (
                 <div className="mt-3">
+                    {activeTab === 'package' && activeUser && (
+                        <div className="mb-2 flex items-center gap-2 text-sm">
+                            <img src={activeUser.avatar} alt="" className="w-6 h-6 rounded-full" />
+                            <span className="font-bold">{activeUser.name}</span>
+                            <button type="button" className="text-xs text-blue-600 underline" onClick={() => setActiveUserId(null)}>Bỏ chọn</button>
+                        </div>
+                    )}
                     <div className="space-y-2">
                         {sortedFolders.map(f => (
                             <div key={f.id}>
@@ -505,7 +528,7 @@ export default function AiLiveStreamGoods() {
                 )}
                 {!goodsLoading && !goodsError && goodsGroups.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                        {goodsGroups.flatMap(g => g.videos).map((v, idx) => (
+                        {goodsGroups.flatMap(g => g.videos).slice(0, visibleRows * CARDS_PER_ROW).map((v, idx) => (
                             <VideoCard
                                 key={v.id}
                                 index={idx + 1}
@@ -520,6 +543,17 @@ export default function AiLiveStreamGoods() {
                                 onPlay={() => openGoodsVideo(v)}
                             />
                         ))}
+                    </div>
+                )}
+                {!goodsLoading && !goodsError && goodsGroups.flatMap(g => g.videos).length > visibleRows * CARDS_PER_ROW && (
+                    <div className="mt-2 text-center">
+                        <button
+                            type="button"
+                            className="border border-gray-300 px-4 py-1 text-sm font-bold hover:bg-gray-50"
+                            onClick={() => setVisibleRows(r => r + 3)}
+                        >
+                            Xem thêm
+                        </button>
                     </div>
                 )}
             </div>

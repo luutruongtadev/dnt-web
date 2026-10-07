@@ -231,3 +231,24 @@ export async function listGoodsWithVideos(q: URLSearchParams) {
 
   return { data, meta: { pagination: { page, pageSize, pageCount: Math.ceil(total / pageSize), total } } };
 }
+
+// Poster answers a pending bid: decision is "accepted" | "rejected". Only the poster may decide.
+export async function decideLiveBid(id: string, bidId: string, decision: string, user: AnyObj | null) {
+  if (decision !== "accepted" && decision !== "rejected") return { error: "invalid-decision" as const };
+  const product = await prisma.products.findFirst({ where: routeWhere(id) });
+  if (!product) return { error: "not-found" as const };
+  const poster = await posterUser(product.id);
+  if (!user || !poster || Number(user.id) !== poster.id) return { error: "forbidden" as const };
+
+  const bids = getArray(product.live_bids);
+  if (!bids.some((b) => b.id === bidId)) return { error: "bid-not-found" as const };
+  const nowIso = new Date().toISOString();
+  const nextBids = bids.map((b) =>
+    b.id === bidId && !b.decision ? { ...b, decision, status: decision, decidedAt: nowIso } : b
+  );
+  const updated = await prisma.products.update({
+    where: { id: product.id },
+    data: { live_bids: nextBids as never, live_session_updated_at: new Date(nowIso) },
+  });
+  return { session: toLiveSession(updated as AnyObj, poster) };
+}
