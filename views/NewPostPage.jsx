@@ -13,7 +13,7 @@ import {
 import PostTypeMenu from "../components/PostTypeMenu";
 import CccdScanner from "../components/CccdScanner";
 import PageHeaderWithOutColorPicker from "../components/PageHeaderWithOutColorPicker.jsx";
-import { getMyBusiness } from "../services/businessService";
+import { getMyDocuments } from "../services/businessService";
 
 
 // MOCK MODE: Read from environment variable to bypass camera/video verification
@@ -50,18 +50,22 @@ export default function NewPostPage() {
     const [previewBlocked, setPreviewBlocked] = useState(false);
     const containerRef = useRef(null);
 
-    // Guard: if business is already verified on the server → go straight to /new-good-post.
-    // Only redirect to /admin-control when NOT yet verified or on error.
+    // Guard: verification only requires a scanned CCCD document (no business needed).
+    // If the user already has a CCCD on file → go straight to /new-good-post.
+    // Only redirect to /admin-control when the CCCD is missing or on error.
     useEffect(() => {
         const checkCccdVerification = async () => {
             try {
-                const res = await getMyBusiness();
-                const business = res?.data?.data;
-                if (res?.data?.verified || business?.status === "verified") {
-                    // Business already verified – skip capture steps entirely
+                const res = await getMyDocuments();
+                const docs = res?.data?.data || [];
+                const hasCccd = docs.some(
+                    (d) => d.type === "cccd" && Array.isArray(d.file) && d.file.length > 0
+                );
+                if (hasCccd) {
+                    // CCCD already verified – skip capture steps entirely
                     navigate("/new-good-post", { replace: true });
                 } else {
-                    // Not verified yet → send to admin-control to complete verification
+                    // No CCCD yet → send to admin-control to scan it
                     navigate("/admin-control", { replace: true });
                 }
             } catch {

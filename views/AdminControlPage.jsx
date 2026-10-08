@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from '@/lib/router-compat';
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
+import { loginAction } from "../context/action/authActions";
 import { ChevronDown, ChevronUp, MapPin, Minus, Plus, ScanLine } from "lucide-react";
 import PageHeaderWithOutColorPicker from "../components/PageHeaderWithOutColorPicker";
 import CccdScanner from "../components/CccdScanner";
@@ -153,6 +154,7 @@ function InfoInputRow({ label, placeholder, value, onChange, inputs = [] }) {
 export default function AdminControlPage() {
   const { t } = useTranslation();
 
+  const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
   // account_type is chosen at registration and saved to localStorage["account_type"].
   // Redux resets on page reload so read the persisted key as fallback.
@@ -636,13 +638,24 @@ export default function AdminControlPage() {
     if (otpPurpose === "address") {
       try {
         setAddressSaving(true);
-        await updateCurrentAddress(
+        const res = await updateCurrentAddress(
           {
             address_no: currentAddressInput.trim(),
             ...(addressOnMap ? { address_on_map: addressOnMap } : {}),
           },
           otpInput
         );
+        // Keep Redux user in sync so the prefill (reads user.address_no) reflects the save.
+        const saved = res?.data?.data || {};
+        dispatch(loginAction({
+          ...user,
+          address_no: saved.address_no ?? currentAddressInput.trim(),
+          ...(saved.address_on_map !== undefined
+            ? { address_on_map: saved.address_on_map }
+            : addressOnMap
+              ? { address_on_map: addressOnMap }
+              : {}),
+        }));
         alert(t('adminControl.addressUpdateSuccess'));
         handleCloseOtpModal();
       } catch (error) {
