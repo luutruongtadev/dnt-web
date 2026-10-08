@@ -7,7 +7,7 @@ import { ChevronDown, ChevronUp, MapPin, Minus, Plus, ScanLine } from "lucide-re
 import PageHeaderWithOutColorPicker from "../components/PageHeaderWithOutColorPicker";
 import CccdScanner from "../components/CccdScanner";
 import { useTranslation } from 'react-i18next';
-import { getSessions, toggleSessionStatus, updateCurrentAddress } from "../services/authService";
+import { getSessions, toggleSessionStatus, updateCurrentAddress, getMe } from "../services/authService";
 import { createOrUpdateBusiness, getMyBusiness, uploadDocumentToStrapi, getMyDocuments, verifyMyBusiness } from "../services/businessService";
 import useLocationSelection from "../hooks/useLocationSelection";
 import MapPickerModal from "../components/contact/MapPickerModal";
@@ -244,7 +244,7 @@ export default function AdminControlPage() {
     setScannerError("");
   }, []);
 
-  const handleCccdResult = useCallback(async ({ fullName, idNumber, frontDataUrl, backDataUrl }) => {
+  const handleCccdResult = useCallback(async ({ fullName, idNumber, placeOfResidence, frontDataUrl, backDataUrl }) => {
     if (!frontDataUrl || !backDataUrl) {
       setScannerError("Chưa lấy được đủ ảnh CCCD hai mặt. Vui lòng quét lại.");
       return;
@@ -261,6 +261,11 @@ export default function AdminControlPage() {
     setCccdFrontDataUrl(frontDataUrl);
     setCccdBackDataUrl(backDataUrl);
     setCccdScanInfo({ fullName: fullName || "", idNumber: idNumber || "" });
+    // Seed "Địa chỉ hiện tại" from the card's residence line; the customer reviews it
+    // and confirms with CẬP NHẬT (OTP) — nothing is saved here.
+    if (placeOfResidence?.trim()) {
+      setCurrentAddressInput((cur) => (cur.trim() ? cur : placeOfResidence.trim()));
+    }
 
     const [frontOk, backOk] = await Promise.all([
       uploadCapturedPhoto(frontDataUrl, "cccd_front"),
@@ -391,6 +396,13 @@ export default function AdminControlPage() {
       setBusinessLoading(true);
       const response = await getMyBusiness();
       const biz = response.data?.data;
+      const savedAddress = response.data?.user_address;
+      if (savedAddress?.address_no) {
+        setCurrentAddressInput((cur) => cur.trim() || savedAddress.address_no);
+      }
+      if (savedAddress?.address_on_map) {
+        setAddressOnMap((cur) => cur || savedAddress.address_on_map);
+      }
       if (biz) {
         setBusinessForm(prev => ({
           ...prev,
@@ -433,6 +445,23 @@ export default function AdminControlPage() {
   useEffect(() => {
     setCurrentAddressInput(user?.address_no || "");
   }, [user?.address_no]);
+
+  // After F5 the Redux user can be missing address fields (stale login payload), so
+  // load the saved address straight from the server.
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("authToken") : null;
+    if (!token) return;
+    let alive = true;
+    getMe(token)
+      .then((res) => {
+        if (!alive) return;
+        const me = res?.data || {};
+        if (me.address_no) setCurrentAddressInput((cur) => cur.trim() || me.address_no);
+        if (me.address_on_map) setAddressOnMap((cur) => cur || me.address_on_map);
+      })
+      .catch((err) => console.error("Error loading saved address:", err));
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     setAddressOnMap(user?.address_on_map || "");
@@ -501,12 +530,20 @@ export default function AdminControlPage() {
 
       for (const doc of docs) {
         const files = doc.file || [];
-        if (doc.type === 'cccd' && files.length > 0) {
+        if (files.length === 0) continue;
+        // CCCD may be a combined "cccd" doc (front=files[0], back=files[1]) or
+        // separate "cccd_front"/"cccd_back" docs — handle both.
+        if (doc.type === 'cccd') {
           if (files[0]) { setCccdFrontDataUrl(files[0].url); setCccdFrontFileId(files[0].id); }
           if (files[1]) { setCccdBackDataUrl(files[1].url); setCccdBackFileId(files[1].id); }
           foundCccd = true;
-        }
-        if (doc.type === 'business_registration' && files.length > 0) {
+        } else if (doc.type === 'cccd_front') {
+          setCccdFrontDataUrl(files[0].url); setCccdFrontFileId(files[0].id);
+          foundCccd = true;
+        } else if (doc.type === 'cccd_back') {
+          setCccdBackDataUrl(files[0].url); setCccdBackFileId(files[0].id);
+          foundCccd = true;
+        } else if (doc.type === 'business_registration') {
           setBusinessRegDataUrl(files[0].url);
           setBusinessRegFileId(files[0].id);
           foundBizReg = true;

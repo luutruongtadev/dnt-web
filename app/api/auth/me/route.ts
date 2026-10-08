@@ -37,5 +37,5 @@ export async function GET(req: Request) {
     account_type: safe.account_type || "ca_nhan",
     avt,
     company_logo: companyLogo ? { url: companyLogo } : null,
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 }

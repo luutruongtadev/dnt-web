@@ -42,7 +42,9 @@ const getMe = async (token) => {
         {
             headers: {
                 Authorization: `Bearer ${token}`,
+                "Cache-Control": "no-cache",
             },
+            params: { _: Date.now() },
         }
     );
     return response;

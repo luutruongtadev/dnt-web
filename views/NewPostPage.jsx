@@ -13,7 +13,7 @@ import {
 import PostTypeMenu from "../components/PostTypeMenu";
 import CccdScanner from "../components/CccdScanner";
 import PageHeaderWithOutColorPicker from "../components/PageHeaderWithOutColorPicker.jsx";
-import { getMyDocuments } from "../services/businessService";
+import { getMyDocuments, verifyMyBusiness } from "../services/businessService";
 
 
 // MOCK MODE: Read from environment variable to bypass camera/video verification
@@ -50,19 +50,40 @@ export default function NewPostPage() {
     const [previewBlocked, setPreviewBlocked] = useState(false);
     const containerRef = useRef(null);
 
-    // Guard: verification only requires a scanned CCCD document (no business needed).
-    // If the user already has a CCCD on file → go straight to /new-good-post.
-    // Only redirect to /admin-control when the CCCD is missing or on error.
+    // Guard: let verified users straight through to /new-good-post.
+    // The admin-control "✓ verified" badge is driven by the backend flag from
+    // verifyMyBusiness(), so trust that same flag first — otherwise a user who
+    // is verified there but whose /user-document/my payload doesn't expose a
+    // populated cccd file[] gets wrongly bounced back here. Fall back to the
+    // raw CCCD-document check, and only send to /admin-control when neither
+    // says verified (or on error).
     useEffect(() => {
         const checkCccdVerification = async () => {
             try {
+                const verifyRes = await verifyMyBusiness();
+                if (verifyRes?.data?.verified === true) {
+                    navigate("/new-good-post", { replace: true });
+                    return;
+                }
+            } catch {
+                // fall through to the document check below
+            }
+
+            try {
                 const res = await getMyDocuments();
                 const docs = res?.data?.data || [];
+                // CCCD is stored as separate "cccd_front"/"cccd_back" docs (and
+                // sometimes a combined "cccd"). Any cccd-type doc with a file means
+                // the ID was scanned → verified.
                 const hasCccd = docs.some(
-                    (d) => d.type === "cccd" && Array.isArray(d.file) && d.file.length > 0
+                    (d) =>
+                        typeof d.type === "string" &&
+                        d.type.startsWith("cccd") &&
+                        Array.isArray(d.file) &&
+                        d.file.length > 0
                 );
                 if (hasCccd) {
-                    // CCCD already verified – skip capture steps entirely
+                    // CCCD already on file – skip capture steps entirely
                     navigate("/new-good-post", { replace: true });
                 } else {
                     // No CCCD yet → send to admin-control to scan it

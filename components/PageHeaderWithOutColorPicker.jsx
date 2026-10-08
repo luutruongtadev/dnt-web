@@ -26,7 +26,7 @@ const PageHeaderWithOutColorPicker = ({
             {/* Color picker input */}
             <input
                 type="color"
-                value={color}
+                value={color ?? "#ffffff"}
                 onChange={e=>onColorChange(e)}
                 className="w-10 h-8 cursor-pointer mt-1"
             />
@@ -53,7 +53,7 @@ const PageHeaderWithOutColorPicker = ({
       {/* Color picker input */}
       <input
         type="color"
-        value={color}
+        value={color ?? "#ffffff"}
         onChange={onColorChange}
         className="w-10 h-8 cursor-pointer mt-1"
       />

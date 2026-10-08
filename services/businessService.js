@@ -82,7 +82,17 @@ const getMyDocuments = async () => {
 
     const response = await axios.get(
         `${API_URL}/user-document/my`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                // Verification state must be read fresh — a stale "no documents"
+                // response cached before the CCCD was scanned would wrongly gate
+                // the user out of /new-post.
+                'Cache-Control': 'no-cache',
+                Pragma: 'no-cache',
+            },
+            params: { _ts: Date.now() },
+        }
     );
     return response;
 };
@@ -94,7 +104,14 @@ const verifyMyBusiness = async () => {
     const response = await axios.post(
         `${API_URL}/business/verify`,
         {},
-        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+        {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache',
+                Pragma: 'no-cache',
+            },
+        }
     );
     return response;
 };

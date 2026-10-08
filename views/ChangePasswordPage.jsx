@@ -47,6 +47,17 @@ export default function ChangePasswordPage() {
         }
     }, [location.state]);
 
+    // Redux `user` is null right after a full page reload, so the (hidden) cccd
+    // field starts empty and submit fails with "điền đầy đủ thông tin". Recover it
+    // from the Redux user once it loads, or from the persisted localStorage user.
+    useEffect(() => {
+        let cccd = user?.cccd;
+        if (!cccd) {
+            try { cccd = JSON.parse(localStorage.getItem("user") || "null")?.cccd; } catch { /* ignore */ }
+        }
+        if (cccd) setFormData(prev => (prev.cccd ? prev : { ...prev, cccd }));
+    }, [user]);
+
     const [passwordValidation, setPasswordValidation] = useState({
         hasUppercase: false,
         hasLowercase: false,
